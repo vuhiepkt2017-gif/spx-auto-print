@@ -17,6 +17,12 @@
         android:roundIcon="@drawable/app_logo"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true">
+
+        <!-- Tự động tải mô hình OCR và Barcode từ Google Play Services khi cài đặt app -->
+        <meta-data
+            android:name="com.google.mlkit.vision.dependencies"
+            android:value="barcode,ocr" />
+
         <activity
             android:name="com.autoprint.shopee.MainActivity"
             android:exported="true"

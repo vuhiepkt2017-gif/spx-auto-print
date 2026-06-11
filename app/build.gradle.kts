@@ -69,10 +69,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit Barcode Scanning (để tự động nhận dạng mã vạch)
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
-    // ML Kit Text Recognition (để nhận diện văn bản OCR)
-    implementation("com.google.mlkit:text-recognition:16.0.0")
+    // ML Kit Barcode Scanning qua Google Play Services (Giúp giảm dung lượng APK còn < 10MB)
+    implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.0")
+    // ML Kit Text Recognition qua Google Play Services
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
 
     // OkHttp (để gọi API lên Google Sheets)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
