@@ -63,6 +63,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -157,22 +158,33 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             return
         }
 
-        val formattedCode = codeToSend.trim().uppercase(Locale.ROOT)
-        isSending = true
-        statusText = "Đang gửi: $formattedCode..."
+        // Tách các mã vận đơn bằng dấu xuống dòng (hỗ trợ in hàng loạt)
+        val rawCodes = codeToSend.split("\n")
+        val cleanCodes = rawCodes.map { it.trim().uppercase(Locale.ROOT) }.filter { it.isNotBlank() }
 
-        // Thêm vào lịch sử ở trạng thái Đang gửi
+        if (cleanCodes.isEmpty()) {
+            statusText = "Lỗi: Không tìm thấy mã vận đơn hợp lệ!"
+            return
+        }
+
+        isSending = true
+        statusText = "Đang gửi ${cleanCodes.size} mã..."
+
         val sdf = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault())
         val timeString = sdf.format(Date())
-        val newItem = PrintHistoryItem(formattedCode, timeString, "Đang gửi")
-        
-        // Thêm vào lịch sử (nếu chưa tồn tại phần tử gửi trùng trong danh sách hiển thị)
-        historyList.add(0, newItem)
+
+        // Thêm tất cả mã vào lịch sử hiển thị
+        cleanCodes.forEach { code ->
+            val newItem = PrintHistoryItem(code, timeString, "Đang gửi")
+            historyList.add(0, newItem)
+        }
 
         coroutineScope.launch(Dispatchers.IO) {
             val client = OkHttpClient()
             val json = JSONObject().apply {
-                put("code", formattedCode)
+                val jsonArray = JSONArray()
+                cleanCodes.forEach { jsonArray.put(it) }
+                put("codes", jsonArray)
                 put("username", username.trim())
                 put("password", password.trim())
             }
@@ -191,29 +203,38 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                     if (response.isSuccessful && responseBody != null) {
                         val respJson = JSONObject(responseBody)
                         if (respJson.getString("status") == "success") {
-                            statusText = "Gửi in thành công: $formattedCode"
-                            // Cập nhật trạng thái lịch sử
-                            val index = historyList.indexOfFirst { it.code == formattedCode && it.status == "Đang gửi" }
-                            if (index != -1) {
-                                historyList[index] = historyList[index].copy(status = "Thành công")
+                            statusText = "Gửi in thành công ${cleanCodes.size} mã!"
+                            // Cập nhật trạng thái thành công cho tất cả mã vừa gửi
+                            cleanCodes.forEach { code ->
+                                val index = historyList.indexOfFirst { it.code == code && it.status == "Đang gửi" }
+                                if (index != -1) {
+                                    historyList[index] = historyList[index].copy(status = "Thành công")
+                                }
                             }
                             // Báo âm thanh thành công
                             ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100).startTone(ToneGenerator.TONE_PROP_ACK)
                         } else {
                             val msg = respJson.optString("message", "Lỗi xác thực hoặc hệ thống")
                             statusText = "Thất bại: $msg"
-                            updateHistoryFailed(historyList, formattedCode, msg)
+                            cleanCodes.forEach { code ->
+                                updateHistoryFailed(historyList, code, msg)
+                            }
                         }
                     } else {
-                        statusText = "Thất bại: HTTP Code ${response.code}"
-                        updateHistoryFailed(historyList, formattedCode, "Lỗi HTTP ${response.code}")
+                        val errorMsg = "Lỗi HTTP ${response.code}"
+                        statusText = "Thất bại: $errorMsg"
+                        cleanCodes.forEach { code ->
+                            updateHistoryFailed(historyList, code, errorMsg)
+                        }
                     }
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     isSending = false
                     statusText = "Lỗi kết nối: ${e.message}"
-                    updateHistoryFailed(historyList, formattedCode, e.message ?: "Lỗi kết nối")
+                    cleanCodes.forEach { code ->
+                        updateHistoryFailed(historyList, code, e.message ?: "Lỗi kết nối")
+                    }
                 }
             }
         }
@@ -232,7 +253,13 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             CameraScannerView(
                 onCodeScanned = { code ->
                     showCameraScanner = false
-                    orderCode = code
+                    
+                    // Nếu đã có mã trước đó, chèn xuống dòng
+                    if (orderCode.isNotBlank()) {
+                        orderCode = orderCode.trim() + "\n" + code
+                    } else {
+                        orderCode = code
+                    }
                     
                     // Rung phản hồi thành công
                     val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
@@ -246,7 +273,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                     }
                     
                     if (autoSubmitOnScan) {
-                        sendPrintRequest(code)
+                        sendPrintRequest(orderCode)
                         orderCode = ""
                     }
                 },
@@ -325,28 +352,21 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                                 }
                             }
 
-                            // Ô nhập mã vận đơn
+                            // Ô nhập mã vận đơn (Hỗ trợ nhiều dòng)
                             OutlinedTextField(
                                 value = orderCode,
                                 onValueChange = { orderCode = it },
-                                label = { Text("Mã vận đơn SPX") },
-                                placeholder = { Text("Nhập hoặc quét mã...") },
-                                modifier = Modifier.fillMaxWidth(),
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Text,
-                                    imeAction = ImeAction.Send
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onSend = {
-                                        focusManager.clearFocus()
-                                        sendPrintRequest(orderCode)
-                                        orderCode = ""
-                                    }
-                                ),
+                                label = { Text("Danh sách mã vận đơn (Mỗi mã 1 dòng)") },
+                                placeholder = { Text("Nhập hoặc quét mã vạch...\nSPXVN0123...\nSPXVN0456...") },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 120.dp, max = 220.dp),
+                                singleLine = false, // Hỗ trợ nhiều dòng
+                                maxLines = 15,
                                 trailingIcon = {
                                     if (orderCode.isNotEmpty()) {
                                         IconButton(onClick = { orderCode = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Xóa")
+                                            Icon(Icons.Default.Clear, contentDescription = "Xóa tất cả")
                                         }
                                     }
                                 },
@@ -383,7 +403,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                                     Text("Quét Mã", color = Color.White)
                                 }
 
-                                // Nút bấm gửi yêu cầu in
+                                // Nút bấm gửi yêu cầu in hàng loạt
                                 Button(
                                     onClick = {
                                         focusManager.clearFocus()
