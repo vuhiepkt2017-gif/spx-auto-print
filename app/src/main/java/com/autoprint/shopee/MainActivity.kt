@@ -55,6 +55,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,6 +124,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
 
     // Quét mã camera (Sử dụng overlay để tránh lỗi crash của Dialog Lifecycle)
     var showCameraScanner by remember { mutableStateOf(false) }
+    var isOcrMode by remember { mutableStateOf(false) } // False: Barcode, True: OCR text
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -135,13 +138,40 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
         if (isGranted) {
             showCameraScanner = true
         } else {
-            Toast.makeText(context, "Ứng dụng cần quyền Camera để quét mã vạch", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Ứng dụng cần quyền Camera để quét mã", Toast.LENGTH_LONG).show()
         }
     }
 
     // Danh sách lịch sử cục bộ của điện thoại này
     val historyList = remember { mutableStateListOf<PrintHistoryItem>() }
     val coroutineScope = rememberCoroutineScope()
+
+    // Hàm phát âm thanh thành công (Được bọc try-catch để chống crash)
+    fun playSuccessBeep() {
+        try {
+            val toneG = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+            toneG.startTone(ToneGenerator.TONE_PROP_ACK)
+        } catch (e: Exception) {
+            Log.e("ShopeeAutoPrint", "Không thể phát âm thanh beep", e)
+        }
+    }
+
+    // Hàm rung phản hồi (Được bọc try-catch để chống crash)
+    fun triggerVibration() {
+        try {
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(100)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ShopeeAutoPrint", "Lỗi rung thiết bị", e)
+        }
+    }
 
     // Hàm gửi mã lên Google Sheets
     fun sendPrintRequest(codeToSend: String) {
@@ -179,22 +209,24 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             historyList.add(0, newItem)
         }
 
-        // Tạo Mã lô (Batch ID) duy nhất cho phiên gửi này
-        val batchId = "BATCH_${username.trim()}_${System.currentTimeMillis()}"
-
         coroutineScope.launch(Dispatchers.IO) {
             val client = OkHttpClient()
-            val json = JSONObject().apply {
+            
+            // Xây dựng JSON gửi đi an toàn
+            val bodyJson = JSONObject()
+            try {
                 val jsonArray = JSONArray()
                 cleanCodes.forEach { jsonArray.put(it) }
-                put("codes", jsonArray)
-                put("batchId", batchId)
-                put("username", username.trim())
-                put("password", password.trim())
+                bodyJson.put("codes", jsonArray)
+                bodyJson.put("username", username.trim())
+                bodyJson.put("password", password.trim())
+            } catch (e: Exception) {
+                Log.e("ShopeeAutoPrint", "Lỗi tạo JSON", e)
             }
-            val body = json.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+
+            val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             val request = Request.Builder()
-                .url(apiUrl)
+                .url(apiUrl.trim())
                 .post(body)
                 .build()
 
@@ -205,23 +237,29 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                 withContext(Dispatchers.Main) {
                     isSending = false
                     if (response.isSuccessful && responseBody != null) {
-                        val respJson = JSONObject(responseBody)
-                        if (respJson.getString("status") == "success") {
-                            statusText = "Gửi in thành công ${cleanCodes.size} mã!"
-                            // Cập nhật trạng thái thành công cho tất cả mã vừa gửi
-                            cleanCodes.forEach { code ->
-                                val index = historyList.indexOfFirst { it.code == code && it.status == "Đang gửi" }
-                                if (index != -1) {
-                                    historyList[index] = historyList[index].copy(status = "Thành công")
+                        try {
+                            val respJson = JSONObject(responseBody)
+                            if (respJson.getString("status") == "success") {
+                                statusText = "Gửi in thành công ${cleanCodes.size} mã!"
+                                // Cập nhật trạng thái thành công cho tất cả mã vừa gửi
+                                cleanCodes.forEach { code ->
+                                    val index = historyList.indexOfFirst { it.code == code && it.status == "Đang gửi" }
+                                    if (index != -1) {
+                                        historyList[index] = historyList[index].copy(status = "Thành công")
+                                    }
+                                }
+                                playSuccessBeep()
+                            } else {
+                                val msg = respJson.optString("message", "Lỗi xác thực từ máy chủ")
+                                statusText = "Thất bại: $msg"
+                                cleanCodes.forEach { code ->
+                                    updateHistoryFailed(historyList, code, msg)
                                 }
                             }
-                            // Báo âm thanh thành công
-                            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100).startTone(ToneGenerator.TONE_PROP_ACK)
-                        } else {
-                            val msg = respJson.optString("message", "Lỗi xác thực hoặc hệ thống")
-                            statusText = "Thất bại: $msg"
+                        } catch (jsonEx: Exception) {
+                            statusText = "Lỗi phản hồi JSON không hợp lệ"
                             cleanCodes.forEach { code ->
-                                updateHistoryFailed(historyList, code, msg)
+                                updateHistoryFailed(historyList, code, "JSON lỗi: ${jsonEx.message}")
                             }
                         }
                     } else {
@@ -255,28 +293,26 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
         // Nếu bật quét mã, hiển thị view quét chiếm toàn màn hình thay vì dialog để tránh lỗi crash
         if (showCameraScanner && hasCameraPermission) {
             CameraScannerView(
+                isOcrMode = isOcrMode,
+                onModeToggle = { isOcrMode = !isOcrMode },
                 onCodeScanned = { code ->
-                    showCameraScanner = false
-                    
-                    // Nếu đã có mã trước đó, chèn xuống dòng
+                    // Thêm mã vào ô tìm kiếm
                     if (orderCode.isNotBlank()) {
-                        orderCode = orderCode.trim() + "\n" + code
+                        // Tránh chèn trùng mã trong ô nhập tạm
+                        val existingList = orderCode.split("\n").map { it.trim() }
+                        if (!existingList.contains(code)) {
+                            orderCode = orderCode.trim() + "\n" + code
+                            triggerVibration()
+                            playSuccessBeep()
+                        }
                     } else {
                         orderCode = code
-                    }
-                    
-                    // Rung phản hồi thành công
-                    val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
-                    if (vibrator != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            vibrator.vibrate(VibrationEffect.createOneShot(120, VibrationEffect.DEFAULT_AMPLITUDE))
-                        } else {
-                            @Suppress("DEPRECATION")
-                            vibrator.vibrate(120)
-                        }
+                        triggerVibration()
+                        playSuccessBeep()
                     }
                     
                     if (autoSubmitOnScan) {
+                        showCameraScanner = false
                         sendPrintRequest(orderCode)
                         orderCode = ""
                     }
@@ -385,11 +421,12 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                             // Hàng các nút điều khiển chính
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                // Nút kích hoạt quét CameraX
+                                // Nút Quét mã vạch (Barcode)
                                 Button(
                                     onClick = {
+                                        isOcrMode = false
                                         if (hasCameraPermission) {
                                             showCameraScanner = true
                                         } else {
@@ -402,9 +439,30 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF333333)),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Quét camera")
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Quét Mã", color = Color.White)
+                                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Quét vạch")
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Quét Vạch", color = Color.White, fontSize = 12.sp)
+                                }
+
+                                // Nút Chụp ảnh/Quét chữ OCR
+                                Button(
+                                    onClick = {
+                                        isOcrMode = true
+                                        if (hasCameraPermission) {
+                                            showCameraScanner = true
+                                        } else {
+                                            requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(56.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF424242)),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(Icons.Default.CameraAlt, contentDescription = "Chụp quét chữ")
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Quét Chữ (OCR)", color = Color.White, fontSize = 12.sp)
                                 }
 
                                 // Nút bấm gửi yêu cầu in hàng loạt
@@ -425,8 +483,8 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                                         CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                                     } else {
                                         Icon(Icons.Default.Print, contentDescription = "Gửi in")
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Gửi In", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Gửi In", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                     }
                                 }
                             }
@@ -575,7 +633,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text("Tự động gửi khi quét xong", color = Color.White)
-                                    Text("App tự động gửi in ngay sau khi camera quét thành công mã vạch", fontSize = 11.sp, color = Color.Gray)
+                                    Text("App tự động gửi in ngay sau khi quét thành công", fontSize = 11.sp, color = Color.Gray)
                                 }
                                 Switch(
                                     checked = autoSubmitOnScan,
@@ -621,25 +679,45 @@ fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String
     }
 }
 
-// Chuyển Dialog thành Composable View toàn màn hình để không bao giờ bị crash View Tree Lifecycle trong Jetpack Compose
+// Chuyển Dialog thành Composable View toàn màn hình kết hợp quét OCR văn bản trực tiếp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraScannerView(
+    isOcrMode: Boolean,
+    onModeToggle: () -> Unit,
     onCodeScanned: (String) -> Unit,
     onDismiss: () -> Unit,
     cameraExecutor: ExecutorService
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val previewView = remember { PreviewView(context) }
+    
+    // Sử dụng state để lưu trữ view an toàn, khởi tạo trong AndroidView factory tránh lỗi context bị rác
+    var previewViewReference: PreviewView? by remember { mutableStateOf(null) }
     
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Quét mã vạch đơn hàng", fontSize = 16.sp, color = Color.White) },
+                title = { 
+                    Text(
+                        if (isOcrMode) "Chế độ: Quét chữ OCR" else "Chế độ: Quét mã vạch", 
+                        fontSize = 16.sp, 
+                        color = Color.White
+                    ) 
+                },
                 navigationIcon = {
                     IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Trở lại", tint = Color.White)
+                    }
+                },
+                actions = {
+                    // Nút chuyển đổi chế độ Quét mã vạch <-> Quét chữ OCR trực tiếp trên thanh công cụ
+                    IconButton(onClick = onModeToggle) {
+                        Icon(
+                            if (isOcrMode) Icons.Default.QrCodeScanner else Icons.Default.CameraAlt, 
+                            contentDescription = "Chuyển chế độ",
+                            tint = Color(0xFFFF5722)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.Black)
@@ -652,9 +730,14 @@ fun CameraScannerView(
                 .padding(padding)
                 .background(Color.Black)
         ) {
-            // Hiển thị camera stream
+            // Hiển thị camera stream trực tiếp khởi tạo an toàn
             AndroidView(
-                factory = { previewView },
+                factory = { ctx ->
+                    PreviewView(ctx).apply {
+                        scaleType = PreviewView.ScaleType.FILL_CENTER
+                        previewViewReference = this
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
 
@@ -684,24 +767,41 @@ fun CameraScannerView(
                 }
             }
 
-            // Khởi chạy cameraX
-            DisposableEffect(Unit) {
+            // Hướng dẫn nhỏ hiển thị ở đáy camera
+            Text(
+                text = if (isOcrMode) "Đưa Camera hướng vào nhãn đơn hàng có in chữ SPXVN..." else "Đưa Camera hướng vào mã vạch của đơn hàng",
+                color = Color.LightGray,
+                fontSize = 12.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 32.dp)
+                    .background(Color.Black.copy(alpha = 0.6f), shape = RoundedCornerShape(8.dp))
+                    .padding(8.dp)
+            )
+
+            // Khởi chạy cameraX khi view được gắn thành công
+            LaunchedEffect(previewViewReference, isOcrMode) {
+                val viewRef = previewViewReference ?: return@LaunchedEffect
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
                 
                 cameraProviderFuture.addListener({
                     val cameraProvider = cameraProviderFuture.get()
                     
                     val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
+                        it.setSurfaceProvider(viewRef.surfaceProvider)
                     }
 
+                    // Khởi tạo Analyzer đa năng
                     val imageAnalysis = ImageAnalysis.Builder()
                         .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                         .build()
                         .also {
-                            it.setAnalyzer(cameraExecutor, BarcodeAnalyzer { code ->
-                                onCodeScanned(code)
-                            })
+                            it.setAnalyzer(cameraExecutor, ScanAnalyzer(
+                                isOcrMode = { isOcrMode },
+                                onBarcodeDetected = onCodeScanned,
+                                onTextDetected = onCodeScanned
+                            ))
                         }
 
                     val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
@@ -715,17 +815,20 @@ fun CameraScannerView(
                             imageAnalysis
                         )
                     } catch (e: Exception) {
-                        Log.e("CameraScannerView", "Không thể bind lifecycle", e)
+                        Log.e("CameraScannerView", "Lỗi liên kết CameraX", e)
                     }
 
                 }, ContextCompat.getMainExecutor(context))
-
+            }
+            
+            // Hủy đăng ký camera khi đóng màn hình
+            DisposableEffect(Unit) {
                 onDispose {
                     try {
                         val cameraProvider = ProcessCameraProvider.getInstance(context).get()
                         cameraProvider.unbindAll()
                     } catch (e: Exception) {
-                        Log.e("CameraScannerView", "Không thể unbind camera", e)
+                        Log.e("CameraScannerView", "Không thể hủy bind camera", e)
                     }
                 }
             }
@@ -733,33 +836,69 @@ fun CameraScannerView(
     }
 }
 
-class BarcodeAnalyzer(private val onBarcodeDetected: (String) -> Unit) : ImageAnalysis.Analyzer {
+// Analyzer đa năng kết hợp cả quét mã vạch và nhận diện chữ live OCR
+class ScanAnalyzer(
+    private val isOcrMode: () -> Boolean,
+    private val onBarcodeDetected: (String) -> Unit,
+    private val onTextDetected: (String) -> Unit
+) : ImageAnalysis.Analyzer {
     
-    private val scanner = BarcodeScanning.getClient()
+    private val barcodeScanner = BarcodeScanning.getClient()
+    private val textRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    
+    // Biểu thức chính quy phát hiện mã vận đơn SPXVN hoặc VN của Shopee SPX
+    private val regexPattern = Regex("(SPXVN[0-9]{10,20}|VN[0-9]{10,20})", RegexOption.IGNORE_CASE)
 
     @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
         val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            scanner.process(image)
-                .addOnSuccessListener { barcodes ->
-                    for (barcode in barcodes) {
-                        val rawValue = barcode.rawValue
-                        if (rawValue != null && rawValue.isNotBlank()) {
-                            onBarcodeDetected(rawValue)
-                            break
+        if (mediaImage == null) {
+            imageProxy.close()
+            return
+        }
+
+        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+        
+        if (isOcrMode()) {
+            // Chế độ nhận dạng chữ OCR thời gian thực
+            textRecognizer.process(image)
+                .addOnSuccessListener { visionText ->
+                    val textContent = visionText.text
+                    if (textContent.isNotBlank()) {
+                        val matches = regexPattern.findAll(textContent)
+                        for (match in matches) {
+                            val code = match.value.uppercase(Locale.ROOT)
+                            if (code.isNotBlank()) {
+                                onTextDetected(code)
+                                break // Tìm thấy mã đầu tiên thì dừng
+                            }
                         }
                     }
                 }
-                .addOnFailureListener {
-                    Log.e("BarcodeAnalyzer", "Lỗi ML Kit", it)
+                .addOnFailureListener { e ->
+                    Log.e("ScanAnalyzer", "OCR quét thất bại", e)
                 }
                 .addOnCompleteListener {
                     imageProxy.close()
                 }
         } else {
-            imageProxy.close()
+            // Chế độ quét mã vạch tiêu chuẩn
+            barcodeScanner.process(image)
+                .addOnSuccessListener { barcodes ->
+                    for (barcode in barcodes) {
+                        val rawValue = barcode.rawValue
+                        if (rawValue != null && rawValue.isNotBlank()) {
+                            onBarcodeDetected(rawValue.trim().uppercase(Locale.ROOT))
+                            break // Lấy mã đầu tiên
+                        }
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("ScanAnalyzer", "Mã vạch quét thất bại", e)
+                }
+                .addOnCompleteListener {
+                    imageProxy.close()
+                }
         }
     }
 }
