@@ -82,6 +82,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Bẫy lỗi toàn cục (Uncaught Exception Handler) để ghi lại chi tiết lỗi crash
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val prefs = getSharedPreferences("ShopeeAutoPrintPrefs", Context.MODE_PRIVATE)
+                val sw = java.io.StringWriter()
+                throwable.printStackTrace(java.io.PrintWriter(sw))
+                val stackTrace = sw.toString()
+                prefs.edit().putString("last_crash_trace", stackTrace).commit()
+                Log.e("ShopeeAutoPrintCrash", "CRASH DETECTED: $stackTrace")
+            } catch (e: Exception) {
+                // Bỏ qua
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         sharedPreferences = getSharedPreferences("ShopeeAutoPrintPrefs", Context.MODE_PRIVATE)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
@@ -109,6 +126,63 @@ data class PrintHistoryItem(
 fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: ExecutorService) {
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+
+    // Kiểm tra xem có lỗi crash trước đó không để hiển thị cho người dùng báo lỗi
+    var crashTrace by remember { 
+        mutableStateOf(sharedPreferences.getString("last_crash_trace", "") ?: "") 
+    }
+
+    if (crashTrace.isNotEmpty()) {
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Ứng dụng bị lỗi đột ngột trước đó", color = Color(0xFFFF5722), fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Vui lòng chụp ảnh hoặc sao chép toàn bộ lỗi dưới đây gửi cho kỹ thuật:", color = Color.White)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = crashTrace,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 200.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFFFF5722),
+                            focusedLabelColor = Color(0xFFFF5722)
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        try {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            val clip = android.content.ClipData.newPlainText("Crash Trace", crashTrace)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "Đã sao chép lỗi!", Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            Log.e("ShopeeAutoPrint", "Lỗi sao chép clipboard", e)
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5722))
+                ) {
+                    Text("Sao chép")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        sharedPreferences.edit().remove("last_crash_trace").apply()
+                        crashTrace = ""
+                    }
+                ) {
+                    Text("Bỏ qua", color = Color.Gray)
+                }
+            }
+        )
+    }
 
     // Cấu hình lưu trữ tài khoản do admin cấp
     var username by remember { mutableStateOf(sharedPreferences.getString("username", "") ?: "") }
@@ -149,32 +223,23 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
     var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Khởi tạo ToneGenerator một lần duy nhất để tránh cạn kiệt tài nguyên audio track gây crash native
-    val toneGenerator = remember {
-        try {
-            ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
-        } catch (e: Exception) {
-            Log.e("ShopeeAutoPrint", "Không thể khởi tạo ToneGenerator", e)
-            null
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            try {
-                toneGenerator?.release()
-            } catch (e: Exception) {
-                Log.e("ShopeeAutoPrint", "Lỗi giải phóng ToneGenerator", e)
-            }
-        }
-    }
-
-    // Hàm phát âm thanh thành công (Được bọc try-catch chống crash hoàn toàn)
+    // Hàm phát âm thanh thành công (Được bọc try-catch chống crash hoàn toàn trên luồng phụ)
     fun playSuccessBeep() {
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK)
-        } catch (e: Exception) {
-            Log.e("ShopeeAutoPrint", "Lỗi phát âm thanh beep", e)
+        coroutineScope.launch(Dispatchers.IO) {
+            var toneG: ToneGenerator? = null
+            try {
+                toneG = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
+                toneG.startTone(ToneGenerator.TONE_PROP_ACK)
+                kotlinx.coroutines.delay(200) // Để âm thanh phát xong
+            } catch (e: Exception) {
+                Log.e("ShopeeAutoPrint", "Lỗi phát âm thanh beep", e)
+            } finally {
+                try {
+                    toneG?.release()
+                } catch (ex: Exception) {
+                    // Bỏ qua
+                }
+            }
         }
     }
 
@@ -822,54 +887,59 @@ fun CameraScannerView(
                     } else {
                         Button(
                             onClick = {
-                                isProcessingOcr = true
-                                imageCapture.takePicture(
-                                    ContextCompat.getMainExecutor(context),
-                                    object : ImageCapture.OnImageCapturedCallback() {
-                                        override fun onCaptureSuccess(imageProxy: ImageProxy) {
-                                            try {
-                                                val mediaImage = imageProxy.image
-                                                if (mediaImage != null) {
-                                                    val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-                                                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                                                    
-                                                    recognizer.process(inputImage)
-                                                        .addOnSuccessListener { visionText ->
-                                                            val textContent = visionText.text
-                                                            val regex = Regex("(SPXVN[0-9]+|VN[0-9]+)", RegexOption.IGNORE_CASE)
-                                                            val matches = regex.findAll(textContent)
-                                                            val foundCodes = matches.map { it.value.toUpperCase(Locale.ROOT) }.toList()
-                                                            
-                                                            if (foundCodes.isNotEmpty()) {
-                                                                onOcrBulkCodes(foundCodes)
-                                                            } else {
-                                                                Toast.makeText(context, "Không tìm thấy mã SPX nào trong ảnh!", Toast.LENGTH_LONG).show()
+                                try {
+                                    isProcessingOcr = true
+                                    imageCapture.takePicture(
+                                        ContextCompat.getMainExecutor(context),
+                                        object : ImageCapture.OnImageCapturedCallback() {
+                                            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                                                try {
+                                                    val mediaImage = imageProxy.image
+                                                    if (mediaImage != null) {
+                                                        val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                                                        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                                        
+                                                        recognizer.process(inputImage)
+                                                            .addOnSuccessListener { visionText ->
+                                                                val textContent = visionText.text
+                                                                val regex = Regex("(SPXVN[0-9]+|VN[0-9]+)", RegexOption.IGNORE_CASE)
+                                                                val matches = regex.findAll(textContent)
+                                                                val foundCodes = matches.map { it.value.toUpperCase(Locale.ROOT) }.toList()
+                                                                
+                                                                if (foundCodes.isNotEmpty()) {
+                                                                    onOcrBulkCodes(foundCodes)
+                                                                } else {
+                                                                    Toast.makeText(context, "Không tìm thấy mã SPX nào trong ảnh!", Toast.LENGTH_LONG).show()
+                                                                }
                                                             }
-                                                        }
-                                                        .addOnFailureListener { e ->
-                                                            Toast.makeText(context, "Lỗi quét chữ: ${e.message}", Toast.LENGTH_SHORT).show()
-                                                        }
-                                                        .addOnCompleteListener {
-                                                            isProcessingOcr = false
-                                                            imageProxy.close()
-                                                        }
-                                                } else {
+                                                            .addOnFailureListener { e ->
+                                                                Toast.makeText(context, "Lỗi quét chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                            .addOnCompleteListener {
+                                                                isProcessingOcr = false
+                                                                imageProxy.close()
+                                                            }
+                                                    } else {
+                                                        isProcessingOcr = false
+                                                        imageProxy.close()
+                                                    }
+                                                } catch (ex: Exception) {
                                                     isProcessingOcr = false
                                                     imageProxy.close()
+                                                    Log.e("ShopeeAutoPrint", "OCR error", ex)
                                                 }
-                                            } catch (ex: Exception) {
+                                            }
+
+                                            override fun onError(exception: ImageCaptureException) {
                                                 isProcessingOcr = false
-                                                imageProxy.close()
-                                                Log.e("ShopeeAutoPrint", "OCR error", ex)
+                                                Toast.makeText(context, "Lỗi chụp ảnh: ${exception.message}", Toast.LENGTH_SHORT).show()
                                             }
                                         }
-
-                                        override fun onError(exception: ImageCaptureException) {
-                                            isProcessingOcr = false
-                                            Toast.makeText(context, "Lỗi chụp ảnh: ${exception.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                    }
-                                )
+                                    )
+                                } catch (e: Exception) {
+                                    isProcessingOcr = false
+                                    Toast.makeText(context, "Không thể kích hoạt chụp: ${e.message}", Toast.LENGTH_LONG).show()
+                                }
                             },
                             modifier = Modifier
                                 .size(75.dp),
@@ -981,30 +1051,35 @@ class ScanAnalyzer(
 
     @ExperimentalGetImage
     override fun analyze(imageProxy: ImageProxy) {
-        val mediaImage = imageProxy.image
-        if (mediaImage == null) {
-            imageProxy.close()
-            return
-        }
+        try {
+            val mediaImage = imageProxy.image
+            if (mediaImage == null) {
+                imageProxy.close()
+                return
+            }
 
-        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-        
-        barcodeScanner.process(image)
-            .addOnSuccessListener { barcodes ->
-                for (barcode in barcodes) {
-                    val rawValue = barcode.rawValue
-                    if (rawValue != null && rawValue.isNotBlank()) {
-                        onBarcodeDetected(rawValue.trim().uppercase(Locale.ROOT))
-                        break
+            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+            
+            barcodeScanner.process(image)
+                .addOnSuccessListener { barcodes ->
+                    for (barcode in barcodes) {
+                        val rawValue = barcode.rawValue
+                        if (rawValue != null && rawValue.isNotBlank()) {
+                            onBarcodeDetected(rawValue.trim().uppercase(Locale.ROOT))
+                            break
+                        }
                     }
                 }
-            }
-            .addOnFailureListener { e ->
-                Log.e("ScanAnalyzer", "Mã vạch quét thất bại", e)
-            }
-            .addOnCompleteListener {
-                imageProxy.close()
-            }
+                .addOnFailureListener { e ->
+                    Log.e("ScanAnalyzer", "Mã vạch quét thất bại", e)
+                }
+                .addOnCompleteListener {
+                    imageProxy.close()
+                }
+        } catch (e: Exception) {
+            Log.e("ScanAnalyzer", "Lỗi phân tích hình ảnh", e)
+            imageProxy.close()
+        }
     }
 }
 
