@@ -223,24 +223,9 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
     var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
     val coroutineScope = rememberCoroutineScope()
 
-    // Hàm phát âm thanh thành công (Được bọc try-catch chống crash hoàn toàn trên luồng phụ)
+    // Hàm phát âm thanh thành công (Đã loại bỏ hoàn toàn ToneGenerator để tránh lỗi hệ thống âm thanh gây crash)
     fun playSuccessBeep() {
-        coroutineScope.launch(Dispatchers.IO) {
-            var toneG: ToneGenerator? = null
-            try {
-                toneG = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 80)
-                toneG.startTone(ToneGenerator.TONE_PROP_ACK)
-                kotlinx.coroutines.delay(200) // Để âm thanh phát xong
-            } catch (e: Exception) {
-                Log.e("ShopeeAutoPrint", "Lỗi phát âm thanh beep", e)
-            } finally {
-                try {
-                    toneG?.release()
-                } catch (ex: Exception) {
-                    // Bỏ qua
-                }
-            }
-        }
+        // Đã loại bỏ âm thanh theo yêu cầu của người dùng
     }
 
     // Hàm rung phản hồi (Được bọc try-catch chống crash hoàn toàn)
