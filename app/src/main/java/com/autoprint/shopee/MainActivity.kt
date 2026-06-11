@@ -148,7 +148,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             return
         }
 
-        val formattedCode = codeToSend.trim()
+        val formattedCode = codeToSend.trim().uppercase(Locale.ROOT)
         isSending = true
         statusText = "Đang gửi: $formattedCode..."
 
