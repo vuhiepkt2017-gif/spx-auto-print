@@ -179,12 +179,16 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             historyList.add(0, newItem)
         }
 
+        // Tạo Mã lô (Batch ID) duy nhất cho phiên gửi này
+        val batchId = "BATCH_${username.trim()}_${System.currentTimeMillis()}"
+
         coroutineScope.launch(Dispatchers.IO) {
             val client = OkHttpClient()
             val json = JSONObject().apply {
                 val jsonArray = JSONArray()
                 cleanCodes.forEach { jsonArray.put(it) }
                 put("codes", jsonArray)
+                put("batchId", batchId)
                 put("username", username.trim())
                 put("password", password.trim())
             }
