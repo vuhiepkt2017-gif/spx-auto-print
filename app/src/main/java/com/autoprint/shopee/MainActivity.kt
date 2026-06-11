@@ -211,7 +211,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
     MaterialTheme(
         colorScheme = darkColorScheme(
             primary = Color(0xFFFF5722), // Màu cam Shopee
-            background = Color(0RefColorBackground), // Chỉnh màu tối sang trọng
+            background = Color(0xFF121212), // Chỉnh màu tối sang trọng
             surface = Color(0xFF1E1E1E)
         )
     ) {
