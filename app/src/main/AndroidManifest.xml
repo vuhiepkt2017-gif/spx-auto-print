@@ -5,12 +5,14 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Quyền sử dụng Camera để quét mã vận đơn -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Quyền Rung để phản hồi khi quét thành công -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
         android:allowBackup="true"
-        android:label="Shopee Auto Print"
+        android:label="Hỗ trợ in"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true">
         <activity
