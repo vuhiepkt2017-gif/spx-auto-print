@@ -146,7 +146,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
     }
 
     // Danh sách lịch sử cục bộ của điện thoại này
-    val historyList = remember { mutableStateListOf<PrintHistoryItem>() }
+    var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
     val coroutineScope = rememberCoroutineScope()
 
     // Khởi tạo ToneGenerator một lần duy nhất để tránh cạn kiệt tài nguyên audio track gây crash native
@@ -227,10 +227,8 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
             val timeString = sdf.format(Date())
 
             // Thêm tất cả mã vào lịch sử hiển thị
-            cleanCodes.forEach { code ->
-                val newItem = PrintHistoryItem(code, timeString, "Đang gửi")
-                historyList.add(0, newItem)
-            }
+            val newItems = cleanCodes.map { PrintHistoryItem(it, timeString, "Đang gửi") }
+            historyList = newItems + historyList
 
             // Tạo Mã lô (Batch ID) duy nhất cho phiên gửi này
             val batchId = "BATCH_${username.trim()}_${System.currentTimeMillis()}"
@@ -253,51 +251,70 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                         .post(body)
                         .build()
 
-                    val response = client.newCall(request).execute()
-                    val responseBody = response.body?.string()
-                    
-                    withContext(Dispatchers.Main) {
-                        isSending = false
-                        if (response.isSuccessful && responseBody != null) {
-                            try {
-                                val respJson = JSONObject(responseBody)
-                                if (respJson.getString("status") == "success") {
-                                    statusText = "Gửi in thành công ${cleanCodes.size} mã!"
-                                    cleanCodes.forEach { code ->
-                                        val index = historyList.indexOfFirst { it.code == code && it.status == "Đang gửi" }
-                                        if (index != -1) {
-                                            historyList[index] = historyList[index].copy(status = "Thành công")
+                    client.newCall(request).execute().use { response ->
+                        val responseBody = response.body?.string()
+                        withContext(Dispatchers.Main) {
+                            isSending = false
+                            if (response.isSuccessful && responseBody != null) {
+                                try {
+                                    val respJson = JSONObject(responseBody)
+                                    if (respJson.getString("status") == "success") {
+                                        statusText = "Gửi in thành công ${cleanCodes.size} mã!"
+                                        historyList = historyList.map { item ->
+                                            if (cleanCodes.contains(item.code) && item.status == "Đang gửi") {
+                                                item.copy(status = "Thành công")
+                                            } else {
+                                                item
+                                            }
+                                        }
+                                        playSuccessBeep()
+                                        triggerVibration()
+                                    } else {
+                                        val msg = respJson.optString("message", "Lỗi từ máy chủ")
+                                        statusText = "Thất bại: $msg"
+                                        historyList = historyList.map { item ->
+                                            if (cleanCodes.contains(item.code) && item.status == "Đang gửi") {
+                                                item.copy(status = "Thất bại", errorMessage = msg)
+                                            } else {
+                                                item
+                                            }
                                         }
                                     }
-                                    playSuccessBeep()
-                                    triggerVibration()
-                                } else {
-                                    val msg = respJson.optString("message", "Lỗi từ máy chủ")
-                                    statusText = "Thất bại: $msg"
-                                    cleanCodes.forEach { code ->
-                                        updateHistoryFailed(historyList, code, msg)
+                                } catch (jsonEx: Exception) {
+                                    val errMsg = "JSON lỗi: ${jsonEx.message}"
+                                    statusText = "Lỗi đọc dữ liệu máy chủ"
+                                    historyList = historyList.map { item ->
+                                        if (cleanCodes.contains(item.code) && item.status == "Đang gửi") {
+                                            item.copy(status = "Thất bại", errorMessage = errMsg)
+                                        } else {
+                                            item
+                                        }
                                     }
                                 }
-                            } catch (jsonEx: Exception) {
-                                statusText = "Lỗi đọc dữ liệu máy chủ"
-                                cleanCodes.forEach { code ->
-                                    updateHistoryFailed(historyList, code, "JSON lỗi: ${jsonEx.message}")
+                            } else {
+                                val errorMsg = "Lỗi kết nối máy chủ (HTTP ${response.code})"
+                                statusText = "Thất bại: $errorMsg"
+                                historyList = historyList.map { item ->
+                                    if (cleanCodes.contains(item.code) && item.status == "Đang gửi") {
+                                        item.copy(status = "Thất bại", errorMessage = errorMsg)
+                                    } else {
+                                        item
+                                    }
                                 }
-                            }
-                        } else {
-                            val errorMsg = "Lỗi kết nối máy chủ (HTTP ${response.code})"
-                            statusText = "Thất bại: $errorMsg"
-                            cleanCodes.forEach { code ->
-                                updateHistoryFailed(historyList, code, errorMsg)
                             }
                         }
                     }
                 } catch (e: Exception) {
+                    val errMsg = e.message ?: "Lỗi kết nối"
                     withContext(Dispatchers.Main) {
                         isSending = false
-                        statusText = "Lỗi kết nối: ${e.message}"
-                        cleanCodes.forEach { code ->
-                            updateHistoryFailed(historyList, code, e.message ?: "Lỗi kết nối")
+                        statusText = "Lỗi kết nối: $errMsg"
+                        historyList = historyList.map { item ->
+                            if (cleanCodes.contains(item.code) && item.status == "Đang gửi") {
+                                item.copy(status = "Thất bại", errorMessage = errMsg)
+                            } else {
+                                item
+                            }
                         }
                     }
                 }
@@ -535,7 +552,7 @@ fun ShopeeAutoPrintApp(sharedPreferences: SharedPreferences, cameraExecutor: Exe
                                         "Xóa hết",
                                         color = Color(0xFFFF5722),
                                         fontSize = 13.sp,
-                                        modifier = Modifier.clickable { historyList.clear() }
+                                modifier = Modifier.clickable { historyList = emptyList() }
                                     )
                                 }
                             }
@@ -991,10 +1008,5 @@ class ScanAnalyzer(
     }
 }
 
-// Cập nhật lịch sử khi gửi thất bại
-fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String, error: String) {
-    val index = historyList.indexOfFirst { it.code == code && it.status == "Đang gửi" }
-    if (index != -1) {
-        historyList[index] = historyList[index].copy(status = "Thất bại", errorMessage = error)
-    }
-}
+// Cập nhật lịch sử khi gửi thất bại (Đã chuyển sang map trực tiếp, giữ lại hàm trống để tránh lỗi tham chiếu nếu có)
+fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String, error: String) {}
