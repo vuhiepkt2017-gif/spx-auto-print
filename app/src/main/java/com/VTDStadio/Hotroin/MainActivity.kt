@@ -625,6 +625,7 @@ fun ShopeeAutoPrintApp(
                 currentUserName = name
                 currentUserRole = role
                 currentRiderCode = rCode
+                activeTab = 0
                 isLoggedIn = true
 
                 sharedPreferences.edit().apply {
@@ -1033,6 +1034,7 @@ fun ShopeeAutoPrintApp(
                                         currentUserName = ""
                                         currentUserRole = ""
                                         currentRiderCode = ""
+                                        activeTab = 0
                                         sharedPreferences.edit().apply {
                                             putBoolean("is_logged_in", false)
                                             putString("user_email", "")
@@ -1050,6 +1052,7 @@ fun ShopeeAutoPrintApp(
                                     currentUserName = ""
                                     currentUserRole = ""
                                     currentRiderCode = ""
+                                    activeTab = 0
                                     sharedPreferences.edit().apply {
                                         putBoolean("is_logged_in", false)
                                         putString("user_email", "")
