@@ -286,6 +286,9 @@ fun ShopeeAutoPrintApp(
     // App Configurations (Admin Synced)
     var webAppUrl by remember { mutableStateOf("https://script.google.com/macros/s/AKfycbzdPN27raSNnCeH19dpKUYzWmccLkCjFyoLjKlxEeKg3cLOJA4JezXZbboEgG6g0GpQZA/exec") }
     var autoSubmitOnScan by remember { mutableStateOf(sharedPreferences.getBoolean("auto_submit_on_scan", false)) }
+    var sheetUsername by remember { mutableStateOf(sharedPreferences.getString("sheet_username", "") ?: "") }
+    var sheetPassword by remember { mutableStateOf(sharedPreferences.getString("sheet_password", "") ?: "") }
+    var currentRiderRealName by remember { mutableStateOf(sharedPreferences.getString("rider_real_name", "") ?: "") }
 
     // Active Screen States
     var activeTab by remember { mutableStateOf(0) } // 0: Quét & In, 1: Quản trị (Chỉ Admin)
@@ -456,7 +459,7 @@ fun ShopeeAutoPrintApp(
         }
     }
 
-    // Listen to firestore configurations (WebApp URL)
+    // Listen to firestore configurations (WebApp URL and sheet credentials)
     val db = remember { FirebaseFirestore.getInstance() }
     var configListener by remember { mutableStateOf<ListenerRegistration?>(null) }
 
@@ -474,6 +477,16 @@ fun ShopeeAutoPrintApp(
                         if (!url.isNullOrBlank()) {
                             webAppUrl = url
                         }
+                        val user = snapshot.getString("sheetUsername")
+                        if (user != null) {
+                            sheetUsername = user
+                            sharedPreferences.edit().putString("sheet_username", user).apply()
+                        }
+                        val pass = snapshot.getString("sheetPassword")
+                        if (pass != null) {
+                            sheetPassword = pass
+                            sharedPreferences.edit().putString("sheet_password", pass).apply()
+                        }
                     }
                 }
         } else {
@@ -482,9 +495,47 @@ fun ShopeeAutoPrintApp(
         }
     }
 
+    // Safeguard: Lock Rider role out of Admin Dashboard tab
+    LaunchedEffect(currentUserRole) {
+        if (currentUserRole != "Admin") {
+            activeTab = 0
+        }
+    }
+
     DisposableEffect(Unit) {
         onDispose {
             configListener?.remove()
+        }
+    }
+
+    val handleSignOut: () -> Unit = {
+        isLoggedIn = false
+        currentUserEmail = ""
+        currentUserName = ""
+        currentUserRole = ""
+        currentRiderCode = ""
+        currentRiderRealName = ""
+        activeTab = 0
+        sharedPreferences.edit().apply {
+            putBoolean("is_logged_in", false)
+            putString("user_email", "")
+            putString("user_name", "")
+            putString("user_role", "")
+            putString("rider_code", "")
+            putString("rider_real_name", "")
+            apply()
+        }
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestEmail()
+                    .build()
+                val googleSignInClient = GoogleSignIn.getClient(context, gso)
+                googleSignInClient.signOut()
+                FirebaseAuth.getInstance().signOut()
+            } catch (e: Exception) {
+                Log.e("ShopeeAutoPrint", "Sign out background error", e)
+            }
         }
     }
 
@@ -529,6 +580,18 @@ fun ShopeeAutoPrintApp(
         val emailToSend = currentUserEmail.ifBlank { sharedPreferences.getString("user_email", "") ?: "unregistered@gmail.com" }
         val nameToSend = currentUserName.ifBlank { sharedPreferences.getString("user_name", "") ?: "Unregistered" }
         val codeToSend = currentRiderCode.ifBlank { sharedPreferences.getString("rider_code", "") ?: "NONE" }
+        val batchId = "BATCH_${codeToSend}_${System.currentTimeMillis()}"
+
+        val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+        val formattedRiderName = if (currentUserRole == "Admin") {
+            nameToSend
+        } else if (finalRiderRealName.isNotBlank()) {
+            "$finalRiderRealName ( $codeToSend - $nameToSend )"
+        } else {
+            "$nameToSend ( $codeToSend - $nameToSend )"
+        }
+
+        val passToSend = sheetPassword.ifBlank { sharedPreferences.getString("sheet_password", "") ?: "NOPASSWORD" }
 
         coroutineScope.launch(Dispatchers.IO) {
             try {
@@ -537,9 +600,12 @@ fun ShopeeAutoPrintApp(
                     val jsonArray = JSONArray()
                     cleanCodes.forEach { jsonArray.put(it) }
                     put("codes", jsonArray)
-                    put("username", nameToSend)
+                    put("batchId", batchId)
+                    put("username", formattedRiderName)
+                    put("riderName", formattedRiderName)
                     put("email", emailToSend)
                     put("riderCode", codeToSend)
+                    put("password", passToSend)
                 }
 
                 val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
@@ -620,12 +686,12 @@ fun ShopeeAutoPrintApp(
     if (!isLoggedIn) {
         LoginScreen(
             sharedPreferences = sharedPreferences,
-            onLoginSuccess = { email, name, role, isVerified, rCode ->
+            onLoginSuccess = { email, name, role, isVerified, rCode, rRealName ->
                 currentUserEmail = email
                 currentUserName = name
                 currentUserRole = role
                 currentRiderCode = rCode
-                activeTab = 0
+                currentRiderRealName = rRealName
                 isLoggedIn = true
 
                 sharedPreferences.edit().apply {
@@ -634,6 +700,7 @@ fun ShopeeAutoPrintApp(
                     putString("user_name", name)
                     putString("user_role", role)
                     putString("rider_code", rCode)
+                    putString("rider_real_name", rRealName)
                     apply()
                 }
             }
@@ -711,45 +778,7 @@ fun ShopeeAutoPrintApp(
                                 )
                             }
                             if (currentUserRole != "Admin") {
-                                IconButton(onClick = {
-                                    try {
-                                        val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                            .requestEmail()
-                                            .build()
-                                        val googleSignInClient = GoogleSignIn.getClient(context, gso)
-                                        googleSignInClient.signOut().addOnCompleteListener {
-                                            FirebaseAuth.getInstance().signOut()
-                                            isLoggedIn = false
-                                            currentUserEmail = ""
-                                            currentUserName = ""
-                                            currentUserRole = ""
-                                            currentRiderCode = ""
-                                            sharedPreferences.edit().apply {
-                                                putBoolean("is_logged_in", false)
-                                                putString("user_email", "")
-                                                putString("user_name", "")
-                                                putString("user_role", "")
-                                                putString("rider_code", "")
-                                                apply()
-                                            }
-                                        }
-                                    } catch (e: Exception) {
-                                        FirebaseAuth.getInstance().signOut()
-                                        isLoggedIn = false
-                                        currentUserEmail = ""
-                                        currentUserName = ""
-                                        currentUserRole = ""
-                                        currentRiderCode = ""
-                                        sharedPreferences.edit().apply {
-                                            putBoolean("is_logged_in", false)
-                                            putString("user_email", "")
-                                            putString("user_name", "")
-                                            putString("user_role", "")
-                                            putString("rider_code", "")
-                                            apply()
-                                        }
-                                    }
-                                }) {
+                                IconButton(onClick = handleSignOut) {
                                     Icon(
                                         imageVector = Icons.Default.Logout,
                                         contentDescription = "Đăng xuất",
@@ -804,7 +833,7 @@ fun ShopeeAutoPrintApp(
                         AIParticleBackground()
                     }
 
-                    if (activeTab == 0) {
+                    if (activeTab == 0 || currentUserRole != "Admin") {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1014,64 +1043,40 @@ fun ShopeeAutoPrintApp(
                         }
                     } else {
                         // Admin Dashboard
+                        // Admin Dashboard
                         AdminDashboardView(
                             db = db,
                             currentUserEmail = currentUserEmail,
                             currentUserName = currentUserName,
                             currentUserRole = currentUserRole,
                             webAppUrl = webAppUrl,
-                            onLogout = {
-                                // Explicit Google Sign Out to clear cached sign-in credentials
-                                try {
-                                    val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                                        .requestEmail()
-                                        .build()
-                                    val googleSignInClient = GoogleSignIn.getClient(context, gso)
-                                    googleSignInClient.signOut().addOnCompleteListener {
-                                        FirebaseAuth.getInstance().signOut()
-                                        isLoggedIn = false
-                                        currentUserEmail = ""
-                                        currentUserName = ""
-                                        currentUserRole = ""
-                                        currentRiderCode = ""
-                                        activeTab = 0
-                                        sharedPreferences.edit().apply {
-                                            putBoolean("is_logged_in", false)
-                                            putString("user_email", "")
-                                            putString("user_name", "")
-                                            putString("user_role", "")
-                                            putString("rider_code", "")
-                                            apply()
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("ShopeeAutoPrint", "Google Sign Out error", e)
-                                    FirebaseAuth.getInstance().signOut()
-                                    isLoggedIn = false
-                                    currentUserEmail = ""
-                                    currentUserName = ""
-                                    currentUserRole = ""
-                                    currentRiderCode = ""
-                                    activeTab = 0
-                                    sharedPreferences.edit().apply {
-                                        putBoolean("is_logged_in", false)
-                                        putString("user_email", "")
-                                        putString("user_name", "")
-                                        putString("user_role", "")
-                                        putString("rider_code", "")
-                                        apply()
-                                    }
-                                }
-                            },
+                            sheetUsername = sheetUsername,
+                            sheetPassword = sheetPassword,
+                            onLogout = handleSignOut,
                             onUpdateWebAppUrl = { newUrl ->
                                 webAppUrl = newUrl
                                 db.collection("config").document("app_settings")
-                                    .set(mapOf("webAppUrl" to newUrl))
+                                    .set(mapOf("webAppUrl" to newUrl), com.google.firebase.firestore.SetOptions.merge())
                                     .addOnSuccessListener {
                                         Toast.makeText(context, "Đã cập nhật WebApp URL!", Toast.LENGTH_SHORT).show()
                                     }
                                     .addOnFailureListener { e ->
                                         Toast.makeText(context, "Lỗi cập nhật: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                            },
+                            onUpdateCredentials = { user, pass ->
+                                sheetUsername = user
+                                sheetPassword = pass
+                                db.collection("config").document("app_settings")
+                                    .set(mapOf(
+                                        "sheetUsername" to user,
+                                        "sheetPassword" to pass
+                                    ), com.google.firebase.firestore.SetOptions.merge())
+                                    .addOnSuccessListener {
+                                        Toast.makeText(context, "Đã lưu tài khoản Google Sheets!", Toast.LENGTH_SHORT).show()
+                                    }
+                                    .addOnFailureListener { e ->
+                                        Toast.makeText(context, "Lỗi lưu tài khoản: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                             }
                         )
@@ -1089,15 +1094,27 @@ fun AdminDashboardView(
     currentUserName: String,
     currentUserRole: String,
     webAppUrl: String,
+    sheetUsername: String,
+    sheetPassword: String,
     onLogout: () -> Unit,
-    onUpdateWebAppUrl: (String) -> Unit
+    onUpdateWebAppUrl: (String) -> Unit,
+    onUpdateCredentials: (String, String) -> Unit
 ) {
     val isDark = LocalThemeIsDark.current
     var inputWebAppUrl by remember { mutableStateOf(webAppUrl) }
     var isEditingUrl by remember { mutableStateOf(false) }
 
+    var inputSheetUser by remember { mutableStateOf(sheetUsername) }
+    var inputSheetPass by remember { mutableStateOf(sheetPassword) }
+    var isEditingCreds by remember { mutableStateOf(false) }
+
     LaunchedEffect(webAppUrl) {
         inputWebAppUrl = webAppUrl
+    }
+
+    LaunchedEffect(sheetUsername, sheetPassword) {
+        inputSheetUser = sheetUsername
+        inputSheetPass = sheetPassword
     }
 
     LazyColumn(
@@ -1190,6 +1207,74 @@ fun AdminDashboardView(
                             fontSize = 13.sp,
                             modifier = Modifier.padding(vertical = 4.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        item {
+            // Google Sheets Credentials Card
+            Card(
+                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Cấu hình Tài khoản Sheets", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        IconButton(onClick = { isEditingCreds = !isEditingCreds }) {
+                            Icon(
+                                imageVector = if (isEditingCreds) Icons.Default.Check else Icons.Default.Edit,
+                                contentDescription = "Sửa Credentials",
+                                tint = if (isEditingCreds) Color.Green else getTextColor(isDark)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    if (isEditingCreds) {
+                        OutlinedTextField(
+                            value = inputSheetUser,
+                            onValueChange = { inputSheetUser = it },
+                            label = { Text("Tài khoản (Username)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = getGlassBorderColor(isDark)
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = inputSheetPass,
+                            onValueChange = { inputSheetPass = it },
+                            label = { Text("Mật khẩu (Password)") },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = getGlassBorderColor(isDark)
+                            )
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Button(
+                            onClick = {
+                                onUpdateCredentials(inputSheetUser, inputSheetPass)
+                                isEditingCreds = false
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ThemePrimary),
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Lưu tài khoản")
+                        }
+                    } else {
+                        Text("Tài khoản: ${sheetUsername.ifBlank { "(Chưa cấu hình)" }}", color = getTextColor(isDark).copy(alpha = 0.7f))
+                        Text("Mật khẩu: ${if (sheetPassword.isBlank()) "(Chưa cấu hình)" else "********"}", color = getTextColor(isDark).copy(alpha = 0.7f))
                     }
                 }
             }
@@ -1414,7 +1499,7 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
 @Composable
 fun LoginScreen(
     sharedPreferences: SharedPreferences,
-    onLoginSuccess: (String, String, String, Boolean, String) -> Unit
+    onLoginSuccess: (String, String, String, Boolean, String, String) -> Unit
 ) {
     val context = LocalContext.current
     val db = remember { FirebaseFirestore.getInstance() }
@@ -1458,11 +1543,11 @@ fun LoginScreen(
                                         ))
                                         .addOnSuccessListener {
                                             isLoading = false
-                                            onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN")
+                                            onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN", "Admin")
                                         }
                                         .addOnFailureListener { e ->
                                             isLoading = false
-                                            onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN")
+                                            onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN", "Admin")
                                         }
                                 } else {
                                     // Normal user: Check if already registered
@@ -1472,7 +1557,8 @@ fun LoginScreen(
                                             if (doc.exists()) {
                                                 val rCode = doc.getString("riderCode") ?: ""
                                                 val rRole = doc.getString("role") ?: "Rider"
-                                                onLoginSuccess(userEmail, userName, rRole, true, rCode)
+                                                val rRealName = doc.getString("riderRealName") ?: ""
+                                                onLoginSuccess(userEmail, userName, rRole, true, rCode, rRealName)
                                             } else {
                                                 step = 2
                                             }
@@ -1690,16 +1776,18 @@ fun LoginScreen(
                                             .addOnSuccessListener { doc ->
                                                 isLoading = false
                                                 if (doc.exists()) {
+                                                    val riderRealName = doc.getString("name") ?: ""
                                                     db.collection("active_riders").document(email)
                                                         .set(mapOf(
                                                             "email" to email,
                                                             "name" to displayName,
                                                             "role" to "Rider",
                                                             "riderCode" to codeToCheck,
+                                                            "riderRealName" to riderRealName,
                                                             "lastActive" to Date()
                                                         ))
                                                         .addOnSuccessListener {
-                                                            onLoginSuccess(email, displayName, "Rider", true, codeToCheck)
+                                                            onLoginSuccess(email, displayName, "Rider", true, codeToCheck, riderRealName)
                                                         }
                                                         .addOnFailureListener { e ->
                                                             errorMessage = "Lỗi lưu trạng thái: ${e.message}"
