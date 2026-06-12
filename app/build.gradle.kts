@@ -1,14 +1,16 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.gms.google-services")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
-    namespace = "com.autoprint.shopee"
+    namespace = "com.VTDStadio.Hotroin"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.autoprint.shopee"
+        applicationId = "com.VTDStadio.Hotroin"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -30,17 +32,14 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
     buildFeatures {
         compose = true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
     }
     packaging {
         resources {
@@ -55,7 +54,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.8.2")
     
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2024.01.00"))
+    implementation(platform("androidx.compose:compose-bom:2025.02.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -69,16 +68,25 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ML Kit Barcode Scanning qua Google Play Services (Giúp giảm dung lượng APK còn < 10MB)
+    // ML Kit Barcode Scanning qua Google Play Services
     implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.0")
     // ML Kit Text Recognition qua Google Play Services
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
+    
+    // Fix CameraX ListenableFuture dependency error
+    implementation("com.google.guava:guava:33.0.0-android")
 
     // OkHttp (để gọi API lên Google Sheets)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Firebase & Google Sign-In
+    implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
+    implementation("com.google.firebase:firebase-auth")
+    implementation("com.google.firebase:firebase-firestore")
+    implementation("com.google.android.gms:play-services-auth:21.2.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.15.0")

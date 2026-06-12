@@ -24,7 +24,7 @@
             android:value="barcode,ocr" />
 
         <activity
-            android:name="com.autoprint.shopee.MainActivity"
+            android:name="com.VTDStadio.Hotroin.MainActivity"
             android:exported="true"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:windowSoftInputMode="adjustResize">
