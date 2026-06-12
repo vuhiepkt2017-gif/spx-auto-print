@@ -579,6 +579,26 @@ fun ShopeeAutoPrintApp(
     }
 
     var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
+    val db = remember { FirebaseFirestore.getInstance() }
+
+    fun updateHistoryList(newList: List<PrintHistoryItem>) {
+        historyList = newList
+        if (currentUserEmail.isNotBlank()) {
+            val itemsMap = newList.map { item ->
+                mapOf(
+                    "code" to item.code,
+                    "timestamp" to item.timestamp,
+                    "status" to item.status,
+                    "errorMessage" to (item.errorMessage ?: "")
+                )
+            }
+            db.collection("print_history").document(currentUserEmail)
+                .set(mapOf("items" to itemsMap))
+                .addOnFailureListener { e ->
+                    Log.e("ShopeeAutoPrint", "Error saving history to firestore", e)
+                }
+        }
+    }
 
     // Helper to parse dates and clean old history for Rider role
     fun cleanOldHistoryIfNeeded(currentRole: String, currentList: List<PrintHistoryItem>): List<PrintHistoryItem> {
@@ -610,16 +630,45 @@ fun ShopeeAutoPrintApp(
         }
     }
 
+    // Load history when user changes (login/logout/launch)
+    LaunchedEffect(currentUserEmail) {
+        if (currentUserEmail.isNotBlank()) {
+            db.collection("print_history").document(currentUserEmail).get()
+                .addOnSuccessListener { doc ->
+                    if (doc.exists()) {
+                        val items = doc.get("items") as? List<Map<String, Any>>
+                        if (items != null) {
+                            val loadedList = items.map { map ->
+                                PrintHistoryItem(
+                                    code = map["code"]?.toString() ?: "",
+                                    timestamp = map["timestamp"]?.toString() ?: "",
+                                    status = map["status"]?.toString() ?: "",
+                                    errorMessage = map["errorMessage"]?.toString()?.takeIf { it.isNotEmpty() }
+                                )
+                            }
+                            historyList = cleanOldHistoryIfNeeded(currentUserRole, loadedList)
+                        }
+                    } else {
+                        historyList = emptyList()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("ShopeeAutoPrint", "Error loading history from firestore", e)
+                }
+        } else {
+            historyList = emptyList()
+        }
+    }
+
     // Clean old history on launch or login role resolution
     LaunchedEffect(currentUserRole, historyList.size) {
         val cleaned = cleanOldHistoryIfNeeded(currentUserRole, historyList)
         if (cleaned.size != historyList.size) {
-            historyList = cleaned
+            updateHistoryList(cleaned)
         }
     }
 
     // Listen to firestore configurations (WebApp URL and sheet credentials)
-    val db = remember { FirebaseFirestore.getInstance() }
     var configListener by remember { mutableStateOf<ListenerRegistration?>(null) }
 
     LaunchedEffect(isLoggedIn) {
@@ -675,6 +724,7 @@ fun ShopeeAutoPrintApp(
         currentRiderCode = ""
         currentRiderRealName = ""
         activeTab = 0
+        historyList = emptyList()
         sharedPreferences.edit().apply {
             putBoolean("is_logged_in", false)
             putString("user_email", "")
@@ -733,7 +783,7 @@ fun ShopeeAutoPrintApp(
         val timeString = sdf.format(Date())
 
         val newItems = cleanCodes.map { PrintHistoryItem(it, timeString, "Đang truyền...") }
-        historyList = cleanOldHistoryIfNeeded(currentUserRole, newItems + historyList)
+        updateHistoryList(cleanOldHistoryIfNeeded(currentUserRole, newItems + historyList))
 
         // Ensure we fetch latest values from sharedPreferences directly in case state is out of sync
         val emailToSend = currentUserEmail.ifBlank { sharedPreferences.getString("user_email", "") ?: "unregistered@gmail.com" }
@@ -786,43 +836,43 @@ fun ShopeeAutoPrintApp(
                                 
                                 if (statusVal == "success" || statusVal == "true" || respJson.optBoolean("status") == true) {
                                     statusText = "Gửi in thành công ${cleanCodes.size} mã!"
-                                    historyList = historyList.map { item ->
+                                    updateHistoryList(historyList.map { item ->
                                         if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
                                             item.copy(status = "Thành công")
                                         } else {
                                             item
                                         }
-                                    }
+                                    })
                                     triggerVibration()
                                 } else {
                                     statusText = "Thất bại: $messageVal"
-                                    historyList = historyList.map { item ->
+                                    updateHistoryList(historyList.map { item ->
                                         if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
                                             item.copy(status = "Thất bại", errorMessage = messageVal)
                                         } else {
                                             item
                                         }
-                                    }
+                                    })
                                 }
                             } catch (e: Exception) {
                                 statusText = "Thất bại: Lỗi định dạng phản hồi từ Google Sheets"
-                                historyList = historyList.map { item ->
+                                updateHistoryList(historyList.map { item ->
                                     if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
                                         item.copy(status = "Thất bại", errorMessage = e.message)
                                     } else {
                                         item
                                     }
-                                }
+                                })
                             }
                         } else {
                             statusText = "Thất bại: Mã phản hồi HTTP ${response.code}"
-                            historyList = historyList.map { item ->
+                            updateHistoryList(historyList.map { item ->
                                 if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
                                     item.copy(status = "Thất bại", errorMessage = "HTTP ${response.code}")
                                 } else {
                                     item
                                 }
-                            }
+                            })
                         }
                     }
                 }
@@ -830,13 +880,13 @@ fun ShopeeAutoPrintApp(
                 withContext(Dispatchers.Main) {
                     isSending = false
                     statusText = "Thất bại: ${e.message}"
-                    historyList = historyList.map { item ->
+                    updateHistoryList(historyList.map { item ->
                         if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
                             item.copy(status = "Thất bại", errorMessage = e.message)
                         } else {
                             item
                         }
-                    }
+                    })
                 }
             }
         }
@@ -1148,7 +1198,7 @@ fun ShopeeAutoPrintApp(
                                         color = ThemePrimary,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable { historyList = emptyList() }
+                                        modifier = Modifier.clickable { updateHistoryList(emptyList()) }
                                     )
                                 }
                             }
