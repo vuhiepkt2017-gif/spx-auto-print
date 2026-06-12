@@ -284,7 +284,7 @@ fun ShopeeAutoPrintApp(
     var currentRiderCode by remember { mutableStateOf(sharedPreferences.getString("rider_code", "") ?: "") }
 
     // App Configurations (Admin Synced)
-    var webAppUrl by remember { mutableStateOf("https://script.google.com/macros/s/AKfycbynVXkrHS1O1iztc_DafXpT2gJYYzB3UpF4YEwLbmV4wv8gVVzIYRj-QczoZ_CDwxjvfg/exec") }
+    var webAppUrl by remember { mutableStateOf("https://script.google.com/macros/s/AKfycbzdPN27raSNnCeH19dpKUYzWmccLkCjFyoLjKlxEeKg3cLOJA4JezXZbboEgG6g0GpQZA/exec") }
     var autoSubmitOnScan by remember { mutableStateOf(sharedPreferences.getBoolean("auto_submit_on_scan", false)) }
 
     // Active Screen States
