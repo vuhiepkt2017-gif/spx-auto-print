@@ -97,17 +97,17 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 // Theme Design System Tokens
-val ThemeBgColorDark = Color(0xFF070514)
-val ThemeBgColorLight = Color(0xFFF2F4FC)
-val ThemeSurfaceColorDark = Color(0xFF0F1135)
+val ThemeBgColorDark = Color(0xFF0C0D24)
+val ThemeBgColorLight = Color(0xFFF5F6FC)
+val ThemeSurfaceColorDark = Color(0xFF131536)
 val ThemeSurfaceColorLight = Color(0xFFFFFFFF)
-val ThemePrimary = Color(0xFFFF007F) // Electric Pink
-val ThemeAccent = Color(0xFF8B00FF) // Cyber Purple
-val ThemeCyan = Color(0xFF00F0FF) // Neon Cyan
-val GlassBorderDark = Color(0xFF1E2155)
-val GlassBorderLight = Color(0xFFD4DAF5)
-val TextDarkColor = Color(0xFF0A0E25)
-val TextLightColor = Color(0xFFE2EDFE)
+val ThemePrimary = Color(0xFFB19FFB) // Soft Pastel Lavender
+val ThemeAccent = Color(0xFFFFB8D1) // Soft Pastel Pink
+val ThemeCyan = Color(0xFF80DEEA) // Soft Pastel Cyan
+val GlassBorderDark = Color(0xFF282B5A)
+val GlassBorderLight = Color(0xFFE2E7F5)
+val TextDarkColor = Color(0xFF141933)
+val TextLightColor = Color(0xFFE5EEFC)
 
 val LocalThemeIsDark = compositionLocalOf { true }
 
@@ -120,15 +120,15 @@ fun getThemeBgBrush(isDark: Boolean): Brush {
     return if (isDark) {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFF060412),
-                Color(0xFF0E0B29)
+                Color(0xFF0B0A1F),
+                Color(0xFF131133)
             )
         )
     } else {
         Brush.verticalGradient(
             colors = listOf(
-                Color(0xFFF1F3FD),
-                Color(0xFFE3E7F8)
+                Color(0xFFF4F6FD),
+                Color(0xFFE6EAF9)
             )
         )
     }
