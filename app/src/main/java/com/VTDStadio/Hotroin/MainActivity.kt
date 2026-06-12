@@ -233,17 +233,18 @@ fun Premium3DButton(
 }
 
 fun extractSpxCodes(textContent: String): List<String> {
-    val regex = Regex("([A-Za-z0-9-]{8,25})")
+    val regex = Regex("([A-Za-z0-9/\\\\|._-]{8,25})")
     val foundCodes = mutableListOf<String>()
     if (textContent.isBlank()) return foundCodes
     
     val lines = textContent.split("\n")
     for (line in lines) {
-        // Remove spaces inside the line (handwritten codes are often split by OCR with spaces)
         val stripped = line.replace("\\s".toRegex(), "")
         val matches = regex.findAll(stripped)
         for (match in matches) {
-            var code = match.value.uppercase(Locale.ROOT)
+            var rawCode = match.value.uppercase(Locale.ROOT)
+            var code = rawCode.replace(Regex("[^A-Z0-9]"), "")
+            
             // Sửa lỗi OCR viết tay/in mờ phổ biến:
             if (code.startsWith("5PX")) {
                 code = "SPX" + code.substring(3)
@@ -255,7 +256,34 @@ fun extractSpxCodes(textContent: String): List<String> {
             if (code.startsWith("SPXVN") && code.length == 17 && code.endsWith("8")) {
                 code = code.substring(0, 16) + "B"
             }
-            foundCodes.add(code)
+            
+            // Tự động sửa lỗi nhận diện chữ cái thành số trong phần thân số của mã SPX
+            val prefix = when {
+                code.startsWith("SPXVN") -> "SPXVN"
+                code.startsWith("SPX") -> "SPX"
+                else -> null
+            }
+            if (prefix != null && code.length > prefix.length) {
+                val length = code.length
+                val middleEnd = if (prefix == "SPXVN" && length == 17) 16 else length
+                val middlePart = code.substring(prefix.length, middleEnd)
+                val cleanedMiddle = middlePart.map { char ->
+                    when (char) {
+                        'O' -> '0'
+                        'I', 'L', 'l' -> '1'
+                        'S' -> '5'
+                        'G' -> '6'
+                        'Z' -> '2'
+                        else -> char
+                    }
+                }.joinToString("")
+                val suffix = if (prefix == "SPXVN" && length == 17) code.substring(16) else ""
+                code = prefix + cleanedMiddle + suffix
+            }
+            
+            if (code.length >= 8) {
+                foundCodes.add(code)
+            }
         }
     }
     return foundCodes.distinct()
@@ -319,7 +347,6 @@ data class PrintHistoryItem(
 @Composable
 fun AIParticleBackground() {
     val isDark = LocalThemeIsDark.current
-    val gridColor = if (isDark) Color(0xFF1B1D44).copy(alpha = 0.4f) else Color(0xFFD2D8EC).copy(alpha = 0.5f)
     val glow1 = if (isDark) Color(0xFFB19FFB).copy(alpha = 0.15f) else Color(0xFFE3DCFF).copy(alpha = 0.6f)
     val glow2 = if (isDark) Color(0xFFFFB8D1).copy(alpha = 0.12f) else Color(0xFFFFE3EE).copy(alpha = 0.5f)
     val glow3 = if (isDark) Color(0xFF80DEEA).copy(alpha = 0.12f) else Color(0xFFE0F7FA).copy(alpha = 0.5f)
@@ -359,32 +386,6 @@ fun AIParticleBackground() {
             radius = w * 0.6f,
             center = Offset(w * 0.5f, h * 0.5f)
         )
-
-        // 2. Draw static tech grid overlay
-        val stepX = 40.dp.toPx()
-        val stepY = 40.dp.toPx()
-        
-        var x = 0f
-        while (x < w) {
-            drawLine(
-                color = gridColor,
-                start = Offset(x, 0f),
-                end = Offset(x, h),
-                strokeWidth = 1.dp.toPx()
-            )
-            x += stepX
-        }
-        
-        var y = 0f
-        while (y < h) {
-            drawLine(
-                color = gridColor,
-                start = Offset(0f, y),
-                end = Offset(w, y),
-                strokeWidth = 1.dp.toPx()
-            )
-            y += stepY
-        }
     }
 }
 
@@ -1089,7 +1090,9 @@ fun ShopeeAutoPrintApp(
                                     focusedTextColor = getTextColor(isDark),
                                     unfocusedTextColor = getTextColor(isDark),
                                     focusedBorderColor = ThemePrimary,
-                                    unfocusedBorderColor = getGlassBorderColor(isDark)
+                                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                                 )
                             )
 
@@ -1405,7 +1408,9 @@ fun AdminDashboardView(
                                 focusedTextColor = getTextColor(isDark),
                                 unfocusedTextColor = getTextColor(isDark),
                                 focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = getGlassBorderColor(isDark)
+                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                             )
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1465,7 +1470,9 @@ fun AdminDashboardView(
                                 focusedTextColor = getTextColor(isDark),
                                 unfocusedTextColor = getTextColor(isDark),
                                 focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = getGlassBorderColor(isDark)
+                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                             )
                         )
                         Spacer(modifier = Modifier.height(8.dp))
@@ -1478,7 +1485,9 @@ fun AdminDashboardView(
                                 focusedTextColor = getTextColor(isDark),
                                 unfocusedTextColor = getTextColor(isDark),
                                 focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = getGlassBorderColor(isDark)
+                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                             )
                         )
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1538,7 +1547,9 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
                     focusedTextColor = getTextColor(isDark),
                     unfocusedTextColor = getTextColor(isDark),
                     focusedBorderColor = ThemePrimary,
-                    unfocusedBorderColor = getGlassBorderColor(isDark)
+                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                 )
             )
 
@@ -1551,7 +1562,9 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
                     focusedTextColor = getTextColor(isDark),
                     unfocusedTextColor = getTextColor(isDark),
                     focusedBorderColor = ThemePrimary,
-                    unfocusedBorderColor = getGlassBorderColor(isDark)
+                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                 )
             )
 
@@ -1944,7 +1957,9 @@ fun LoginScreen(
                                     focusedTextColor = getTextColor(isDark),
                                     unfocusedTextColor = getTextColor(isDark),
                                     focusedBorderColor = ThemePrimary,
-                                    unfocusedBorderColor = getGlassBorderColor(isDark)
+                                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                                 )
                             )
                             Row(
