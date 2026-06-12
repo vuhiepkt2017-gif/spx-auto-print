@@ -101,20 +101,33 @@ val ThemeBgColorDark = Color(0xFF0C0D24)
 val ThemeBgColorLight = Color(0xFFF5F6FC)
 val ThemeSurfaceColorDark = Color(0xFF131536)
 val ThemeSurfaceColorLight = Color(0xFFFFFFFF)
-val ThemePrimary = Color(0xFFB19FFB) // Soft Pastel Lavender
-val ThemeAccent = Color(0xFFFFB8D1) // Soft Pastel Pink
-val ThemeCyan = Color(0xFF80DEEA) // Soft Pastel Cyan
+
+val LocalThemeIsDark = compositionLocalOf { true }
+
+val ThemePrimary: Color
+    @Composable
+    get() = if (LocalThemeIsDark.current) Color(0xFFB19FFB) else Color(0xFF4A34E0)
+
+val ThemeAccent: Color
+    @Composable
+    get() = if (LocalThemeIsDark.current) Color(0xFFFFB8D1) else Color(0xFFB5007F)
+
+val ThemeCyan: Color
+    @Composable
+    get() = if (LocalThemeIsDark.current) Color(0xFF80DEEA) else Color(0xFF0097A7)
+
 val GlassBorderDark = Color(0xFF282B5A)
 val GlassBorderLight = Color(0xFFE2E7F5)
 val TextDarkColor = Color(0xFF141933)
 val TextLightColor = Color(0xFFE5EEFC)
 
-val LocalThemeIsDark = compositionLocalOf { true }
-
 fun getThemeBgColor(isDark: Boolean): Color = if (isDark) ThemeBgColorDark else ThemeBgColorLight
 fun getThemeSurfaceColor(isDark: Boolean): Color = if (isDark) ThemeSurfaceColorDark else ThemeSurfaceColorLight
 fun getGlassBorderColor(isDark: Boolean): Color = if (isDark) GlassBorderDark else GlassBorderLight
 fun getTextColor(isDark: Boolean): Color = if (isDark) TextLightColor else TextDarkColor
+
+@Composable
+fun getButtonTextColor(): Color = if (LocalThemeIsDark.current) Color(0xFF0C0D24) else Color.White
 
 fun getThemeBgBrush(isDark: Boolean): Brush {
     return if (isDark) {
@@ -303,58 +316,74 @@ data class PrintHistoryItem(
     val errorMessage: String? = null
 )
 
-data class ParticleData(
-    var x: Float,
-    var y: Float,
-    val vx: Float,
-    val vy: Float,
-    val radius: Float,
-    val isCyan: Boolean
-)
-
 @Composable
 fun AIParticleBackground() {
-    val infiniteTransition = rememberInfiniteTransition(label = "particles")
-    val progress by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(15000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "progress"
-    )
-
-    val particleCount = 20
-    val random = remember { Random(42L) }
-    val particles = remember {
-        List(particleCount) {
-            ParticleData(
-                x = random.nextFloat(),
-                y = random.nextFloat(),
-                vx = (random.nextFloat() - 0.5f) * 0.03f,
-                vy = (random.nextFloat() - 0.5f) * 0.03f,
-                radius = random.nextFloat() * 4f + 2f,
-                isCyan = random.nextBoolean()
-            )
-        }
-    }
+    val isDark = LocalThemeIsDark.current
+    val gridColor = if (isDark) Color(0xFF1B1D44).copy(alpha = 0.4f) else Color(0xFFD2D8EC).copy(alpha = 0.5f)
+    val glow1 = if (isDark) Color(0xFFB19FFB).copy(alpha = 0.15f) else Color(0xFFE3DCFF).copy(alpha = 0.6f)
+    val glow2 = if (isDark) Color(0xFFFFB8D1).copy(alpha = 0.12f) else Color(0xFFFFE3EE).copy(alpha = 0.5f)
+    val glow3 = if (isDark) Color(0xFF80DEEA).copy(alpha = 0.12f) else Color(0xFFE0F7FA).copy(alpha = 0.5f)
 
     Canvas(modifier = Modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
         if (w == 0f || h == 0f) return@Canvas
 
-        particles.forEach { p ->
-            var px = (p.x + p.vx * progress * 50f) % 1f
-            var py = (p.y + p.vy * progress * 50f) % 1f
-            if (px < 0f) px += 1f
-            if (py < 0f) py += 1f
+        // 1. Draw soft radial glow spots (Gemini/AI style)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(glow1, Color.Transparent),
+                center = Offset(w * 0.1f, h * 0.1f),
+                radius = w * 0.8f
+            ),
+            radius = w * 0.8f,
+            center = Offset(w * 0.1f, h * 0.1f)
+        )
 
-            val dx = px * w
-            val dy = py * h
-            val color = if (p.isCyan) ThemeCyan.copy(alpha = 0.25f) else ThemePrimary.copy(alpha = 0.25f)
-            drawCircle(color = color, radius = p.radius, center = Offset(dx, dy))
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(glow2, Color.Transparent),
+                center = Offset(w * 0.9f, h * 0.8f),
+                radius = w * 0.7f
+            ),
+            radius = w * 0.7f,
+            center = Offset(w * 0.9f, h * 0.8f)
+        )
+
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(glow3, Color.Transparent),
+                center = Offset(w * 0.5f, h * 0.5f),
+                radius = w * 0.6f
+            ),
+            radius = w * 0.6f,
+            center = Offset(w * 0.5f, h * 0.5f)
+        )
+
+        // 2. Draw static tech grid overlay
+        val stepX = 40.dp.toPx()
+        val stepY = 40.dp.toPx()
+        
+        var x = 0f
+        while (x < w) {
+            drawLine(
+                color = gridColor,
+                start = Offset(x, 0f),
+                end = Offset(x, h),
+                strokeWidth = 1.dp.toPx()
+            )
+            x += stepX
+        }
+        
+        var y = 0f
+        while (y < h) {
+            drawLine(
+                color = gridColor,
+                start = Offset(0f, y),
+                end = Offset(w, y),
+                strokeWidth = 1.dp.toPx()
+            )
+            y += stepY
         }
     }
 }
@@ -1092,15 +1121,15 @@ fun ShopeeAutoPrintApp(
                                  shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
                              ) {
                                  if (isSending) {
-                                     CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                                     CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
                                  } else {
                                      Row(
                                          verticalAlignment = Alignment.CenterVertically,
                                          horizontalArrangement = Arrangement.Center
                                      ) {
-                                         Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = Color.White)
+                                         Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = getButtonTextColor())
                                          Spacer(modifier = Modifier.width(8.dp))
-                                         Text("TRUYỀN IN CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = Color.White)
+                                         Text("TRUYỀN IN CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = getButtonTextColor())
                                      }
                                  }
                              }
@@ -1142,7 +1171,7 @@ fun ShopeeAutoPrintApp(
                                         .weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    items(historyList) { item ->
+                                    items(historyList, key = { it.code + "_" + it.timestamp }) { item ->
                                         Card(
                                             colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
                                             border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
@@ -1286,9 +1315,9 @@ fun AdminDashboardView(
                         containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
                         shadowColor = ThemePrimary.copy(alpha = 0.4f)
                     ) {
-                        Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = Color.White)
+                        Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Đăng xuất tài khoản", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("Đăng xuất tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1339,7 +1368,7 @@ fun AdminDashboardView(
                             containerColor = ThemePrimary,
                             shadowColor = ThemePrimary.copy(alpha = 0.5f)
                         ) {
-                            Text("Lưu URL", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Lưu URL", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
                     } else {
                         Text(
@@ -1412,7 +1441,7 @@ fun AdminDashboardView(
                             containerColor = ThemePrimary,
                             shadowColor = ThemePrimary.copy(alpha = 0.5f)
                         ) {
-                            Text("Lưu tài khoản", color = Color.White, fontWeight = FontWeight.Bold)
+                            Text("Lưu tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
                     } else {
                         Text("Tài khoản: ${sheetUsername.ifBlank { "(Chưa cấu hình)" }}", color = getTextColor(isDark).copy(alpha = 0.7f))
@@ -1507,12 +1536,12 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
                 shadowColor = ThemePrimary.copy(alpha = 0.5f)
             ) {
                 if (isProcessing) {
-                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                    CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Add, contentDescription = "Tạo mới")
+                        Icon(Icons.Default.Add, contentDescription = "Tạo mới", tint = getButtonTextColor())
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Tạo mới / Cập nhật", fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Tạo mới / Cập nhật", fontWeight = FontWeight.Bold, color = getButtonTextColor())
                     }
                 }
             }
@@ -1839,9 +1868,9 @@ fun LoginScreen(
                                 containerBrush = Brush.linearGradient(listOf(ThemePrimary, ThemeAccent)),
                                 shadowColor = ThemeAccent.copy(alpha = 0.5f)
                             ) {
-                                Icon(Icons.Default.Login, contentDescription = "Login", tint = Color.White)
+                                Icon(Icons.Default.Login, contentDescription = "Login", tint = getButtonTextColor())
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("ĐĂNG NHẬP GOOGLE", fontWeight = FontWeight.Bold, color = Color.White)
+                                Text("ĐĂNG NHẬP GOOGLE", fontWeight = FontWeight.Bold, color = getButtonTextColor())
                             }
                         } else {
                             Text(
@@ -1939,7 +1968,7 @@ fun LoginScreen(
                                     containerBrush = Brush.linearGradient(listOf(ThemePrimary, ThemeAccent)),
                                     shadowColor = ThemeAccent.copy(alpha = 0.5f)
                                 ) {
-                                    Text("Xác Nhận", color = Color.White, fontWeight = FontWeight.Bold)
+                                    Text("Xác Nhận", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
