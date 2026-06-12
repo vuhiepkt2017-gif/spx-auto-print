@@ -26,6 +26,10 @@ jobs:
       with:
         gradle-version: 9.4.1
 
+    - name: Tạo file google-services.json giả lập để qua kiểm tra CI
+      run: |
+        echo '{"project_info":{"project_number":"123456789","project_id":"dummy-id","storage_bucket":"dummy.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789:android:123456","android_client_info":{"package_name":"com.VTDStadio.Hotroin"}},"oauth_client":[],"api_key":[{"current_key":"dummy-key"}]}]}' > app/google-services.json
+
     - name: Build ứng dụng (Tạo APK Debug)
       run: gradle assembleDebug
       working-directory: .
