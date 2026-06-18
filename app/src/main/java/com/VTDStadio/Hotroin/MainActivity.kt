@@ -238,14 +238,15 @@ fun Premium3DButton(
     shadowColor: Color,
     content: @Composable RowScope.() -> Unit
 ) {
-    val c1 = containerColor.copy(alpha = 0.85f)
-    val c2 = containerColor.copy(alpha = 0.65f)
+    // Softer, lighter gradients for all color-based buttons
+    val c1 = containerColor.copy(alpha = 0.65f)
+    val c2 = containerColor.copy(alpha = 0.45f)
     Premium3DButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
         containerBrush = Brush.linearGradient(listOf(c1, c2)),
-        shadowColor = shadowColor,
+        shadowColor = shadowColor.copy(alpha = 0.5f), // softer shadow
         content = content
     )
 }
@@ -1310,7 +1311,7 @@ fun ShopeeAutoPrintApp(
 
                                 OutlinedTextField(
                                     value = orderCode,
-                                    onValueChange = { orderCode = it },
+                                    onValueChange = { orderCode = it.uppercase(java.util.Locale.ROOT) },
                                     placeholder = { Text("Danh sách mã vận đơn (Mỗi mã 1 dòng)", color = getTextColor(isDark).copy(alpha = 0.5f)) },
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -3689,8 +3690,8 @@ fun ChuyenPickView(
                             ocrPhotoLauncher.launch("image/*")
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        containerColor = ThemePrimary,
-                        shadowColor = ThemeAccent.copy(alpha = 0.5f)
+                        containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemeAccent.copy(alpha = 0.8f))),
+                        shadowColor = ThemePrimary.copy(alpha = 0.4f)
                     ) {
                         Icon3D(
                             imageVector = Icons.Default.Image,
@@ -3705,7 +3706,7 @@ fun ChuyenPickView(
                     // TextField: Mã PUP
                     OutlinedTextField(
                         value = pupCode,
-                        onValueChange = { pupCode = it },
+                        onValueChange = { pupCode = it.uppercase(java.util.Locale.ROOT) },
                         placeholder = { Text("Mã PUP (Pickup Point ID)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -3753,7 +3754,7 @@ fun ChuyenPickView(
                             modifier = Modifier
                                 .fillMaxWidth(0.85f)
                                 .heightIn(max = 300.dp)
-                                .background(if (isDark) Color(0xFF1E2142) else Color.White) // Solid contrasting background
+                                .background(if (isDark) Color(0xFFE2E6F2) else Color(0xFF2E3147))
                         ) {
                             OutlinedTextField(
                                 value = searchDriverQuery,
@@ -4163,7 +4164,7 @@ fun ChuyenPickView(
                             DropdownMenu(
                                 expanded = supportDropdownExpanded,
                                 onDismissRequest = { supportDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFF1E2142) else Color.White)
+                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFFE2E6F2) else Color(0xFF2E3147))
                             ) {
                                 if (outHubDrivers.isEmpty()) {
                                     DropdownMenuItem(
