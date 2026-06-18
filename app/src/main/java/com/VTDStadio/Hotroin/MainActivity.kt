@@ -289,6 +289,116 @@ fun extractSpxCodes(textContent: String): List<String> {
     return foundCodes.distinct()
 }
 
+fun extractTargetCodes(text: String): List<String> {
+    val cleanedText = text.uppercase(Locale.ROOT)
+    val found = mutableListOf<String>()
+    
+    // Split by common delimiters to find individual words/codes
+    val words = cleanedText.split(Regex("[\\s,;.:|()\\-\\\\]+"))
+    for (word in words) {
+        var cleanWord = word.replace(Regex("[^A-Z0-9]"), "")
+        
+        // Correct prefix-level OCR errors
+        if (cleanWord.startsWith("0PXVN") || cleanWord.startsWith("OPXVN") || cleanWord.startsWith("5PXVN")) {
+            cleanWord = "SPXVN" + cleanWord.substring(5)
+        } else if (cleanWord.startsWith("0PX") || cleanWord.startsWith("OPX") || cleanWord.startsWith("5PX")) {
+            cleanWord = "SPX" + cleanWord.substring(3)
+        } else if (cleanWord.startsWith("UN") && cleanWord.length >= 10) {
+            cleanWord = "VN" + cleanWord.substring(2)
+        }
+        
+        if (cleanWord.startsWith("SPXVN")) {
+            val digitsPart = cleanWord.substring(5)
+            val cleanedDigits = digitsPart.map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L', 'l' -> '1'
+                    'S' -> '5'
+                    'G' -> '6'
+                    'Z' -> '2'
+                    else -> char
+                }
+            }.joinToString("")
+            val finalCode = "SPXVN" + cleanedDigits
+            if (finalCode.matches(Regex("SPXVN\\d+")) && finalCode.length >= 10) {
+                found.add(finalCode)
+            }
+        } else if (cleanWord.startsWith("VN")) {
+            val digitsPart = cleanWord.substring(2)
+            val cleanedDigits = digitsPart.map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L', 'l' -> '1'
+                    'S' -> '5'
+                    'G' -> '6'
+                    'Z' -> '2'
+                    else -> char
+                }
+            }.joinToString("")
+            val finalCode = "VN" + cleanedDigits
+            if (finalCode.matches(Regex("VN\\d+")) && finalCode.length >= 10) {
+                found.add(finalCode)
+            }
+        } else if (cleanWord.startsWith("SPX")) {
+            val digitsPart = cleanWord.substring(3)
+            val cleanedDigits = digitsPart.map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L', 'l' -> '1'
+                    'S' -> '5'
+                    'G' -> '6'
+                    'Z' -> '2'
+                    else -> char
+                }
+            }.joinToString("")
+            val finalCode = "SPX" + cleanedDigits
+            if (finalCode.matches(Regex("SPX\\d+")) && finalCode.length >= 10) {
+                found.add(finalCode)
+            }
+        }
+    }
+    
+    // Fallback regex scan on the dense text in case delimiters merged them
+    if (found.isEmpty()) {
+        val mergedText = cleanedText.replace("\\s".toRegex(), "")
+        val matchesSpxvn = Regex("SPXVN[0-9OILSGZ]{8,15}").findAll(mergedText)
+        for (m in matchesSpxvn) {
+            val raw = m.value
+            val digitsPart = raw.substring(5)
+            val cleanedDigits = digitsPart.map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L', 'l' -> '1'
+                    'S' -> '5'
+                    'G' -> '6'
+                    'Z' -> '2'
+                    else -> char
+                }
+            }.joinToString("")
+            found.add("SPXVN" + cleanedDigits)
+        }
+        
+        val matchesVn = Regex("VN[0-9OILSGZ]{8,15}").findAll(mergedText)
+        for (m in matchesVn) {
+            val raw = m.value
+            val digitsPart = raw.substring(2)
+            val cleanedDigits = digitsPart.map { char ->
+                when (char) {
+                    'O' -> '0'
+                    'I', 'L', 'l' -> '1'
+                    'S' -> '5'
+                    'G' -> '6'
+                    'Z' -> '2'
+                    else -> char
+                }
+            }.joinToString("")
+            found.add("VN" + cleanedDigits)
+        }
+    }
+    
+    return found.distinct()
+}
+
 class MainActivity : ComponentActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var cameraExecutor: ExecutorService
@@ -439,6 +549,7 @@ fun ShopeeAutoPrintApp(
     val isDark = LocalThemeIsDark.current
 
     // Authentication States
+    var showSplashScreen by remember { mutableStateOf(true) }
     var isLoggedIn by remember { mutableStateOf(sharedPreferences.getBoolean("is_logged_in", false)) }
     var currentUserEmail by remember { mutableStateOf(sharedPreferences.getString("user_email", "") ?: "") }
     var currentUserName by remember { mutableStateOf(sharedPreferences.getString("user_name", "") ?: "") }
@@ -546,28 +657,97 @@ fun ShopeeAutoPrintApp(
                     val bitmap = BitmapFactory.decodeStream(inputStream)
                     if (bitmap != null) {
                         val inputImage = InputImage.fromBitmap(bitmap, 0)
-                        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                        recognizer.process(inputImage)
-                            .addOnSuccessListener { visionText ->
-                                val textContent = visionText.text
-                                val foundCodes = extractSpxCodes(textContent)
-                                if (foundCodes.isNotEmpty()) {
-                                    val existingList = orderCode.split("\n").map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
-                                    var added = 0
-                                    foundCodes.forEach { code ->
-                                        if (!existingList.contains(code)) {
-                                            existingList.add(code)
-                                            added++
-                                        }
+                        
+                        // Step 1: Scan for QR and Barcodes first
+                        val barcodeScanner = BarcodeScanning.getClient()
+                        barcodeScanner.process(inputImage)
+                            .addOnSuccessListener { barcodes ->
+                                val found = mutableListOf<String>()
+                                
+                                // Priority 1: QR code values
+                                val qrCodes = barcodes.filter { it.format == com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE }
+                                for (qr in qrCodes) {
+                                    val rawValue = qr.rawValue ?: ""
+                                    found.addAll(extractTargetCodes(rawValue))
+                                }
+                                
+                                // Priority 2: 1D barcodes/other barcode values (if no codes found in QR)
+                                if (found.isEmpty()) {
+                                    val otherBarcodes = barcodes.filter { it.format != com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE }
+                                    for (bc in otherBarcodes) {
+                                        val rawValue = bc.rawValue ?: ""
+                                        found.addAll(extractTargetCodes(rawValue))
                                     }
-                                    orderCode = existingList.joinToString("\n")
-                                    Toast.makeText(context, "Đã thêm $added mã từ ảnh!", Toast.LENGTH_SHORT).show()
+                                }
+                                
+                                if (found.isNotEmpty()) {
+                                    coroutineScope.launch(Dispatchers.Main) {
+                                        val existingList = orderCode.split("\n").map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+                                        var added = 0
+                                        found.distinct().forEach { code ->
+                                            if (!existingList.contains(code)) {
+                                                existingList.add(code)
+                                                added++
+                                            }
+                                        }
+                                        orderCode = existingList.joinToString("\n")
+                                        Toast.makeText(context, "Đã quét QR/Barcode thành công, thêm $added mã!", Toast.LENGTH_SHORT).show()
+                                    }
                                 } else {
-                                    Toast.makeText(context, "Không tìm thấy mã SPX trong ảnh!", Toast.LENGTH_LONG).show()
+                                    // Priority 3: Fallback to OCR Text Recognition if barcode scanning yielded nothing
+                                    val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                    recognizer.process(inputImage)
+                                        .addOnSuccessListener { visionText ->
+                                            val textContent = visionText.text
+                                            val foundOcr = extractTargetCodes(textContent)
+                                            coroutineScope.launch(Dispatchers.Main) {
+                                                if (foundOcr.isNotEmpty()) {
+                                                    val existingList = orderCode.split("\n").map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+                                                    var added = 0
+                                                    foundOcr.distinct().forEach { code ->
+                                                        if (!existingList.contains(code)) {
+                                                            existingList.add(code)
+                                                            added++
+                                                        }
+                                                    }
+                                                    orderCode = existingList.joinToString("\n")
+                                                    Toast.makeText(context, "Đã quét chữ (OCR) thành công, thêm $added mã!", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Không tìm thấy mã SPX/VN trong ảnh!", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            coroutineScope.launch(Dispatchers.Main) {
+                                                Toast.makeText(context, "Lỗi nhận dạng chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
                                 }
                             }
                             .addOnFailureListener { e ->
-                                Toast.makeText(context, "Lỗi nhận dạng: ${e.message}", Toast.LENGTH_SHORT).show()
+                                // If barcode scan completely failed, try OCR as last resort
+                                val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                                recognizer.process(inputImage)
+                                    .addOnSuccessListener { visionText ->
+                                        val textContent = visionText.text
+                                        val foundOcr = extractTargetCodes(textContent)
+                                        coroutineScope.launch(Dispatchers.Main) {
+                                            if (foundOcr.isNotEmpty()) {
+                                                val existingList = orderCode.split("\n").map { it.trim() }.filter { it.isNotBlank() }.toMutableList()
+                                                var added = 0
+                                                foundOcr.distinct().forEach { code ->
+                                                    if (!existingList.contains(code)) {
+                                                        existingList.add(code)
+                                                        added++
+                                                    }
+                                                }
+                                                orderCode = existingList.joinToString("\n")
+                                                Toast.makeText(context, "Đã quét chữ (OCR) thành công, thêm $added mã!", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Không tìm thấy mã SPX/VN trong ảnh!", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                    }
                             }
                     }
                 } catch (e: Exception) {
@@ -893,7 +1073,9 @@ fun ShopeeAutoPrintApp(
         }
     }
 
-    if (!isLoggedIn) {
+    if (showSplashScreen) {
+        SplashScreen(isDark = isDark, onFinished = { showSplashScreen = false })
+    } else if (!isLoggedIn) {
         LoginScreen(
             sharedPreferences = sharedPreferences,
             onLoginSuccess = { email, name, role, isVerified, rCode, rRealName ->
@@ -961,25 +1143,16 @@ fun ShopeeAutoPrintApp(
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .background(ThemeCyan, shape = CircleShape)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "AUTO PRINT",
-                                    fontWeight = FontWeight.Bold,
-                                    color = getTextColor(isDark),
-                                    fontSize = 18.sp
-                                )
-                            }
+                            TopBarLogo(isDark = isDark)
                         },
                         actions = {
+                            IconButton(onClick = { /* notification action */ }) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = "Thông báo",
+                                    tint = getTextColor(isDark)
+                                )
+                            }
                             IconButton(onClick = { onThemeToggle(!isDark) }) {
                                 Icon(
                                     imageVector = if (isDark) Icons.Default.LightMode else Icons.Default.DarkMode,
@@ -1003,28 +1176,40 @@ fun ShopeeAutoPrintApp(
                     )
                 },
                 bottomBar = {
-                    if (currentUserRole == "Admin") {
-                        NavigationBar(containerColor = getThemeBgColor(isDark)) {
+                    NavigationBar(containerColor = getThemeBgColor(isDark)) {
+                        NavigationBarItem(
+                            selected = activeTab == 0,
+                            onClick = { activeTab = 0 },
+                            icon = {
+                                Icon(
+                                    Icons.Default.Print,
+                                    contentDescription = "Quét & In",
+                                    tint = if (activeTab == 0) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
+                                )
+                            },
+                            label = { Text("Quét & In", color = getTextColor(isDark)) }
+                        )
+                        NavigationBarItem(
+                            selected = activeTab == 1,
+                            onClick = { activeTab = 1 },
+                            icon = {
+                                Icon(
+                                    Icons.Default.LocalShipping,
+                                    contentDescription = "Chuyển Pick",
+                                    tint = if (activeTab == 1) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
+                                )
+                            },
+                            label = { Text("Chuyển Pick", color = getTextColor(isDark)) }
+                        )
+                        if (currentUserRole == "Admin") {
                             NavigationBarItem(
-                                selected = activeTab == 0,
-                                onClick = { activeTab = 0 },
-                                icon = {
-                                    Icon(
-                                        Icons.Default.Print,
-                                        contentDescription = "Quét & In",
-                                        tint = if (activeTab == 0) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
-                                    )
-                                },
-                                label = { Text("Quét & In", color = getTextColor(isDark)) }
-                            )
-                            NavigationBarItem(
-                                selected = activeTab == 1,
-                                onClick = { activeTab = 1 },
+                                selected = activeTab == 2,
+                                onClick = { activeTab = 2 },
                                 icon = {
                                     Icon(
                                         Icons.Default.AdminPanelSettings,
                                         contentDescription = "Quản trị",
-                                        tint = if (activeTab == 1) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
+                                        tint = if (activeTab == 2) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
                                     )
                                 },
                                 label = { Text("Quản trị", color = getTextColor(isDark)) }
@@ -1041,7 +1226,7 @@ fun ShopeeAutoPrintApp(
                 ) {
                     AIParticleBackground()
 
-                    if (activeTab == 0 || currentUserRole != "Admin") {
+                    if (activeTab == 0) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1266,9 +1451,20 @@ fun ShopeeAutoPrintApp(
                                 }
                             }
                         }
-                    } else {
-                        // Admin Dashboard
-                        // Admin Dashboard
+                    } else if (activeTab == 1) {
+                        ChuyenPickView(
+                            db = db,
+                            currentUserEmail = currentUserEmail,
+                            currentUserName = currentUserName,
+                            currentRiderCode = currentRiderCode,
+                            currentRiderRealName = currentRiderRealName,
+                            currentUserRole = currentUserRole,
+                            webAppUrl = webAppUrl,
+                            sharedPreferences = sharedPreferences,
+                            coroutineScope = coroutineScope,
+                            context = context
+                        )
+                    } else if (activeTab == 2 && currentUserRole == "Admin") {
                         AdminDashboardView(
                             db = db,
                             currentUserEmail = currentUserEmail,
@@ -1333,6 +1529,8 @@ fun AdminDashboardView(
     var inputSheetPass by remember { mutableStateOf(sheetPassword) }
     var isEditingCreds by remember { mutableStateOf(false) }
 
+    var selectedSubTab by remember { mutableStateOf(0) } // 0: Cấu hình, 1: Tài khoản, 2: Chuyển Pick
+
     LaunchedEffect(webAppUrl) {
         inputWebAppUrl = webAppUrl
     }
@@ -1342,182 +1540,153 @@ fun AdminDashboardView(
         inputSheetPass = sheetPassword
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            // Profile & Logout Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Thông tin đăng nhập", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Email: $currentUserEmail", color = getTextColor(isDark))
-                    Text("Tên: $currentUserName", color = getTextColor(isDark))
-                    Text("Vai trò: Quản trị viên (Admin)", color = Color(0xFFFFA000), fontWeight = FontWeight.Medium)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Premium3DButton(
-                        onClick = onLogout,
-                        modifier = Modifier.fillMaxWidth(),
-                        containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
-                        shadowColor = ThemePrimary.copy(alpha = 0.4f)
-                    ) {
-                        Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Đăng xuất tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
-                    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .background(getThemeSurfaceColor(isDark).copy(alpha = 0.5f), shape = RoundedCornerShape(12.dp))
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val tabs = listOf("Cấu hình", "Tài khoản", "Chuyển Pick")
+            tabs.forEachIndexed { index, title ->
+                val isSelected = selectedSubTab == index
+                val backgroundBrush = if (isSelected) {
+                    Brush.linearGradient(listOf(ThemePrimary, ThemeAccent))
+                } else {
+                    Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
+                }
+                
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(brush = backgroundBrush)
+                        .clickable { selectedSubTab = index },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (isSelected) Color.White else getTextColor(isDark).copy(alpha = 0.7f)
+                    )
                 }
             }
         }
 
-        item {
-            // Web App URL Settings
-            Card(
-                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+        Spacer(modifier = Modifier.height(8.dp))
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (selectedSubTab == 0) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Cấu hình Web App URL", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        IconButton(onClick = { isEditingUrl = !isEditingUrl }) {
-                            Icon(
-                                imageVector = if (isEditingUrl) Icons.Default.Check else Icons.Default.Edit,
-                                contentDescription = "Sửa URL",
-                                tint = if (isEditingUrl) Color.Green else getTextColor(isDark)
-                            )
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Cấu hình Web App URL", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                IconButton(onClick = { isEditingUrl = !isEditingUrl }) {
+                                    Icon(
+                                        imageVector = if (isEditingUrl) Icons.Default.Check else Icons.Default.Edit,
+                                        contentDescription = "Sửa URL",
+                                        tint = if (isEditingUrl) Color.Green else getTextColor(isDark)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            if (isEditingUrl) {
+                                OutlinedTextField(
+                                    value = inputWebAppUrl,
+                                    onValueChange = { inputWebAppUrl = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = getTextColor(isDark),
+                                        unfocusedTextColor = getTextColor(isDark),
+                                        focusedBorderColor = ThemePrimary,
+                                        unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                        unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                        focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                                    )
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Premium3DButton(
+                                    onClick = {
+                                        onUpdateWebAppUrl(inputWebAppUrl)
+                                        isEditingUrl = false
+                                    },
+                                    modifier = Modifier.align(Alignment.End).width(120.dp),
+                                    containerColor = ThemePrimary,
+                                    shadowColor = ThemePrimary.copy(alpha = 0.5f)
+                                ) {
+                                    Text("Lưu URL", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                                }
+                            } else {
+                                Text(
+                                    text = webAppUrl,
+                                    color = getTextColor(isDark).copy(alpha = 0.7f),
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
+                            }
                         }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (isEditingUrl) {
-                        OutlinedTextField(
-                            value = inputWebAppUrl,
-                            onValueChange = { inputWebAppUrl = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = getTextColor(isDark),
-                                unfocusedTextColor = getTextColor(isDark),
-                                focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Premium3DButton(
-                            onClick = {
-                                onUpdateWebAppUrl(inputWebAppUrl)
-                                isEditingUrl = false
-                            },
-                            modifier = Modifier.align(Alignment.End).width(120.dp),
-                            containerColor = ThemePrimary,
-                            shadowColor = ThemePrimary.copy(alpha = 0.5f)
-                        ) {
-                            Text("Lưu URL", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Text(
-                            text = webAppUrl,
-                            color = getTextColor(isDark).copy(alpha = 0.7f),
-                            fontSize = 13.sp,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
                     }
                 }
-            }
-        }
-
-        item {
-            // Google Sheets Credentials Card
-            Card(
-                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+            } else if (selectedSubTab == 1) {
+                item {
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Cấu hình Tài khoản Sheets", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        IconButton(onClick = { isEditingCreds = !isEditingCreds }) {
-                            Icon(
-                                imageVector = if (isEditingCreds) Icons.Default.Check else Icons.Default.Edit,
-                                contentDescription = "Sửa Credentials",
-                                tint = if (isEditingCreds) Color.Green else getTextColor(isDark)
-                            )
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("Thông tin đăng nhập", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Email: $currentUserEmail", color = getTextColor(isDark))
+                            Text("Tên: $currentUserName", color = getTextColor(isDark))
+                            Text("Vai trò: Quản trị viên (Admin)", color = Color(0xFFFFA000), fontWeight = FontWeight.Medium)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Premium3DButton(
+                                onClick = onLogout,
+                                modifier = Modifier.fillMaxWidth(),
+                                containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
+                                shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                            ) {
+                                Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Đăng xuất tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                            }
                         }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    if (isEditingCreds) {
-                        OutlinedTextField(
-                            value = inputSheetUser,
-                            onValueChange = { inputSheetUser = it },
-                            label = { Text("Tài khoản (Username)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = getTextColor(isDark),
-                                unfocusedTextColor = getTextColor(isDark),
-                                focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = inputSheetPass,
-                            onValueChange = { inputSheetPass = it },
-                            label = { Text("Mật khẩu (Password)") },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = getTextColor(isDark),
-                                unfocusedTextColor = getTextColor(isDark),
-                                focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
-                            )
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Premium3DButton(
-                            onClick = {
-                                onUpdateCredentials(inputSheetUser, inputSheetPass)
-                                isEditingCreds = false
-                            },
-                            modifier = Modifier.align(Alignment.End).width(160.dp),
-                            containerColor = ThemePrimary,
-                            shadowColor = ThemePrimary.copy(alpha = 0.5f)
-                        ) {
-                            Text("Lưu tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
-                        }
-                    } else {
-                        Text("Tài khoản: ${sheetUsername.ifBlank { "(Chưa cấu hình)" }}", color = getTextColor(isDark).copy(alpha = 0.7f))
-                        Text("Mật khẩu: ${if (sheetPassword.isBlank()) "(Chưa cấu hình)" else "********"}", color = getTextColor(isDark).copy(alpha = 0.7f))
                     }
                 }
+                item {
+                    AdminCreateRiderSection(db = db)
+                }
+                item {
+                    AdminRiderListSection(db = db)
+                }
+                item {
+                    AdminRiderListSectionOnlyActive(db = db)
+                }
+            } else if (selectedSubTab == 2) {
+                item {
+                    AdminPupDriversSection(db = db)
+                }
             }
-        }
-
-        // Section: Code Rider Creator
-        item {
-            AdminCreateRiderSection(db = db)
-        }
-
-        // Section: Registered riders
-        item {
-            AdminRiderListSection(db = db)
         }
     }
 }
@@ -1541,7 +1710,7 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
             OutlinedTextField(
                 value = riderCode,
                 onValueChange = { riderCode = it },
-                label = { Text("Mã Code Rider (Ví dụ: VTD01)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                placeholder = { Text("Mã Code Rider (Ví dụ: VTD01)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = getTextColor(isDark),
@@ -1556,7 +1725,7 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
             OutlinedTextField(
                 value = riderName,
                 onValueChange = { riderName = it },
-                label = { Text("Tên Rider tương ứng", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                placeholder = { Text("Tên Rider tương ứng", color = getTextColor(isDark).copy(alpha = 0.6f)) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedTextColor = getTextColor(isDark),
@@ -1616,7 +1785,6 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
 fun AdminRiderListSection(db: FirebaseFirestore) {
     val isDark = LocalThemeIsDark.current
     var riderCodesList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
-    var activeRidersList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
 
     LaunchedEffect(Unit) {
         db.collection("rider_codes")
@@ -1630,20 +1798,6 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
                         }
                     }
                     riderCodesList = list
-                }
-            }
-
-        db.collection("active_riders")
-            .addSnapshotListener { snapshot, error ->
-                if (snapshot != null) {
-                    val list = mutableListOf<Map<String, Any>>()
-                    for (doc in snapshot.documents) {
-                        val data = doc.data
-                        if (data != null) {
-                            list.add(data)
-                        }
-                    }
-                    activeRidersList = list
                 }
             }
     }
@@ -1662,9 +1816,16 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
                     Text("Chưa có Rider Code nào được tạo.", color = getTextColor(isDark).copy(alpha = 0.5f))
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        riderCodesList.forEach { data ->
+                        riderCodesList.forEachIndexed { index, data ->
                             val code = data["code"]?.toString() ?: ""
                             val name = data["name"]?.toString() ?: ""
+                            if (index > 0) {
+                                Divider(
+                                    color = getGlassBorderColor(isDark).copy(alpha = 0.3f),
+                                    thickness = 1.dp,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+                            }
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1689,38 +1850,59 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
                 }
             }
         }
+    }
+}
 
-        // Active Sign-in Accounts List
-        Card(
-            colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-            border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Tài khoản đang hoạt động", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Spacer(modifier = Modifier.height(12.dp))
-                if (activeRidersList.isEmpty()) {
-                    Text("Không có tài khoản nào hoạt động.", color = getTextColor(isDark).copy(alpha = 0.5f))
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        activeRidersList.forEach { data ->
-                            val email = data["email"]?.toString() ?: ""
-                            val name = data["name"]?.toString() ?: ""
-                            val code = data["riderCode"]?.toString() ?: ""
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(getThemeSurfaceColor(isDark).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
-                                    .border(1.dp, getGlassBorderColor(isDark), shape = RoundedCornerShape(8.dp))
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(name, fontWeight = FontWeight.Bold, color = getTextColor(isDark))
-                                    Text("Email: $email", fontSize = 12.sp, color = getTextColor(isDark).copy(alpha = 0.7f))
-                                    Text("Mã Code: $code", fontSize = 12.sp, color = ThemeCyan, fontWeight = FontWeight.Medium)
-                                }
+@Composable
+fun AdminRiderListSectionOnlyActive(db: FirebaseFirestore) {
+    val isDark = LocalThemeIsDark.current
+    var activeRidersList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+
+    LaunchedEffect(Unit) {
+        db.collection("active_riders")
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null) {
+                    val list = mutableListOf<Map<String, Any>>()
+                    for (doc in snapshot.documents) {
+                        val data = doc.data
+                        if (data != null) {
+                            list.add(data)
+                        }
+                    }
+                    activeRidersList = list
+                }
+            }
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Tài khoản đang hoạt động", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            if (activeRidersList.isEmpty()) {
+                Text("Không có tài khoản nào hoạt động.", color = getTextColor(isDark).copy(alpha = 0.5f))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    activeRidersList.forEach { data ->
+                        val email = data["email"]?.toString() ?: ""
+                        val name = data["name"]?.toString() ?: ""
+                        val code = data["riderCode"]?.toString() ?: ""
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(getThemeSurfaceColor(isDark).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
+                                .border(1.dp, getGlassBorderColor(isDark), shape = RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(name, fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                                Text("Email: $email", fontSize = 12.sp, color = getTextColor(isDark).copy(alpha = 0.7f))
+                                Text("Mã Code: $code", fontSize = 12.sp, color = ThemeCyan, fontWeight = FontWeight.Medium)
                             }
                         }
                     }
@@ -1729,6 +1911,7 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
         }
     }
 }
+
 
 @Composable
 fun LoginScreen(
@@ -1951,15 +2134,15 @@ fun LoginScreen(
                             OutlinedTextField(
                                 value = riderCode,
                                 onValueChange = { riderCode = it },
-                                label = { Text("Mã kích hoạt (Rider Code)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                                placeholder = { Text("Mã kích hoạt (Rider Code)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedTextColor = getTextColor(isDark),
                                     unfocusedTextColor = getTextColor(isDark),
                                     focusedBorderColor = ThemePrimary,
                                     unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
                                 )
                             )
                             Row(
@@ -2315,3 +2498,660 @@ class ScanAnalyzer(
 }
 
 fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String, error: String) {}
+
+fun extractPupCode(text: String): String? {
+    val clean = text.replace("\\s".toRegex(), "").uppercase(Locale.ROOT)
+    val regex = Regex("PUP[A-Z0-9]+")
+    val match = regex.find(clean)
+    if (match != null) return match.value
+    
+    // Fallback: Tìm số 5 hoặc 6 chữ số bắt đầu bằng 9
+    val backupRegex = Regex("9[0-9]{4,5}")
+    val backupMatch = backupRegex.find(clean)
+    if (backupMatch != null) return "PUP" + backupMatch.value
+    
+    return null
+}
+
+@Composable
+fun Icon3D(
+    imageVector: ImageVector,
+    contentDescription: String?,
+    tint: Color,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 24.dp
+) {
+    Box(modifier = modifier.size(size)) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            tint = Color.Black.copy(alpha = 0.3f),
+            modifier = Modifier
+                .size(size)
+                .offset(y = 2.dp)
+        )
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            tint = tint,
+            modifier = Modifier.size(size)
+        )
+    }
+}
+
+@Composable
+fun BadgeItem(text: String, isDark: Boolean) {
+    Box(
+        modifier = Modifier
+            .background(
+                color = if (isDark) Color(0xFF131536).copy(alpha = 0.8f) else Color(0xFFE2E7F5).copy(alpha = 0.8f),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(listOf(ThemePrimary, ThemeCyan)),
+                shape = RoundedCornerShape(6.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            color = if (isDark) ThemeCyan else Color(0xFF00838F),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+fun AndroidMascotHead() {
+    Canvas(modifier = Modifier.size(24.dp)) {
+        val w = size.width
+        val h = size.height
+        // Draw head (semi-circle or rounded rectangle at bottom)
+        val headPath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.2f, h * 0.8f)
+            lineTo(w * 0.8f, h * 0.8f)
+            quadraticTo(w * 0.8f, h * 0.4f, w * 0.5f, h * 0.4f)
+            quadraticTo(w * 0.2f, h * 0.4f, w * 0.2f, h * 0.8f)
+        }
+        drawPath(headPath, color = Color(0xFF00C853))
+        
+        // Draw eyes
+        drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(w * 0.38f, h * 0.6f))
+        drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(w * 0.62f, h * 0.6f))
+        
+        // Draw antennas
+        drawLine(
+            color = Color(0xFF00C853),
+            start = Offset(w * 0.35f, h * 0.45f),
+            end = Offset(w * 0.25f, h * 0.25f),
+            strokeWidth = 2.dp.toPx()
+        )
+        drawLine(
+            color = Color(0xFF00C853),
+            start = Offset(w * 0.65f, h * 0.45f),
+            end = Offset(w * 0.75f, h * 0.25f),
+            strokeWidth = 2.dp.toPx()
+        )
+    }
+}
+
+@Composable
+fun TopBarLogo(isDark: Boolean) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // Mascot with "HỖ" speech bubble / badge above it
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Speech bubble/badge "HỖ"
+            Box(
+                modifier = Modifier
+                    .background(
+                        brush = Brush.horizontalGradient(listOf(Color(0xFF00C853), Color(0xFF00E676))),
+                        shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 6.dp, bottomEnd = 0.dp)
+                    )
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "HỖ",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            // Android Head Mascot
+            AndroidMascotHead()
+        }
+        
+        // TRỢ, VẬN, HÀNH badges
+        BadgeItem(text = "TRỢ", isDark = isDark)
+        BadgeItem(text = "VẬN", isDark = isDark)
+        BadgeItem(text = "HÀNH", isDark = isDark)
+    }
+}
+
+@Composable
+fun SplashScreen(isDark: Boolean, onFinished: () -> Unit) {
+    val cyanColor = ThemeCyan
+    LaunchedEffect(Unit) {
+        delay(2500)
+        onFinished()
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(getThemeBgBrush(isDark)),
+        contentAlignment = Alignment.Center
+    ) {
+        AIParticleBackground()
+        
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Rotating circle of dots
+            val infiniteTransition = rememberInfiniteTransition(label = "dotsRotation")
+            val angle by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(4000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart
+                ),
+                label = "angle"
+            )
+            
+            Box(
+                modifier = Modifier.size(240.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Glow circles around the app logo
+                Canvas(modifier = Modifier.size(200.dp)) {
+                    val r = size.width / 2
+                    val center = Offset(r, r)
+                    val dotRadius = 4.dp.toPx()
+                    val orbitalRadius = r - 12.dp.toPx()
+                    
+                    for (i in 0 until 8) {
+                        val currentAngle = (angle + i * 45) * (Math.PI / 180f)
+                        val x = center.x + orbitalRadius * Math.cos(currentAngle).toFloat()
+                        val y = center.y + orbitalRadius * Math.sin(currentAngle).toFloat()
+                        drawCircle(
+                            color = cyanColor.copy(alpha = 0.8f),
+                            radius = dotRadius,
+                            center = Offset(x, y)
+                        )
+                    }
+                }
+                
+                // App Logo in the center
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.VTDStadio.Hotroin.R.drawable.app_logo),
+                    contentDescription = "Logo",
+                    modifier = Modifier
+                        .size(110.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Badges HỖ, TRỢ, VẬN, HÀNH
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                BadgeItem(text = "HỖ", isDark = isDark)
+                BadgeItem(text = "TRỢ", isDark = isDark)
+                BadgeItem(text = "VẬN", isDark = isDark)
+                BadgeItem(text = "HÀNH", isDark = isDark)
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = "Powered by VTD Stadio & Logistics Tech",
+                color = getTextColor(isDark).copy(alpha = 0.5f),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun AdminPupDriversSection(db: FirebaseFirestore) {
+    val isDark = LocalThemeIsDark.current
+    val context = LocalContext.current
+    var driverName by remember { mutableStateOf("") }
+    var driverCode by remember { mutableStateOf("") }
+    var isProcessing by remember { mutableStateOf(false) }
+    var driversList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+
+    LaunchedEffect(Unit) {
+        db.collection("pup_drivers")
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null) {
+                    val list = mutableListOf<Map<String, Any>>()
+                    for (doc in snapshot.documents) {
+                        val data = doc.data
+                        if (data != null) {
+                            list.add(data)
+                        }
+                    }
+                    driversList = list
+                }
+            }
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Quản lý Rider Nhận (Chuyển Pick)", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = driverName,
+                onValueChange = { driverName = it },
+                placeholder = { Text("Tên Rider nhận", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = getTextColor(isDark),
+                    unfocusedTextColor = getTextColor(isDark),
+                    focusedBorderColor = ThemePrimary,
+                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                )
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = driverCode,
+                onValueChange = { driverCode = it },
+                placeholder = { Text("Mã số Rider nhận (ví dụ: 93005)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = getTextColor(isDark),
+                    unfocusedTextColor = getTextColor(isDark),
+                    focusedBorderColor = ThemePrimary,
+                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                )
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Premium3DButton(
+                onClick = {
+                    if (driverName.isBlank() || driverCode.isBlank()) {
+                        Toast.makeText(context, "Vui lòng điền đủ thông tin!", Toast.LENGTH_SHORT).show()
+                        return@Premium3DButton
+                    }
+                    isProcessing = true
+                    val codeDoc = driverCode.trim()
+                    db.collection("pup_drivers").document(codeDoc)
+                        .set(mapOf(
+                            "name" to driverName.trim(),
+                            "code" to codeDoc
+                        ))
+                        .addOnSuccessListener {
+                            isProcessing = false
+                            Toast.makeText(context, "Đã thêm Rider nhận!", Toast.LENGTH_SHORT).show()
+                            driverName = ""
+                            driverCode = ""
+                        }
+                        .addOnFailureListener { e ->
+                            isProcessing = false
+                            Toast.makeText(context, "Lỗi: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                },
+                enabled = !isProcessing,
+                modifier = Modifier.fillMaxWidth(),
+                containerColor = ThemePrimary,
+                shadowColor = ThemeAccent.copy(alpha = 0.5f)
+            ) {
+                Text("Thêm Rider Nhận", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text("Danh sách Rider nhận đã đồng bộ", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            if (driversList.isEmpty()) {
+                Text("Chưa có Rider nhận nào.", color = getTextColor(isDark).copy(alpha = 0.5f))
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    driversList.forEachIndexed { index, data ->
+                        val code = data["code"]?.toString() ?: ""
+                        val name = data["name"]?.toString() ?: ""
+                        if (index > 0) {
+                            Divider(
+                                color = getGlassBorderColor(isDark).copy(alpha = 0.4f),
+                                thickness = 1.dp,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(getThemeSurfaceColor(isDark).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
+                                .border(1.dp, getGlassBorderColor(isDark), shape = RoundedCornerShape(8.dp))
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("$name - $code", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
+                            Premium3DButton(
+                                onClick = {
+                                    db.collection("pup_drivers").document(code).delete()
+                                },
+                                modifier = Modifier.width(54.dp),
+                                containerColor = ThemePrimary,
+                                shadowColor = ThemeAccent.copy(alpha = 0.5f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Xóa Rider",
+                                    tint = getButtonTextColor(),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ChuyenPickView(
+    db: FirebaseFirestore,
+    currentUserEmail: String,
+    currentUserName: String,
+    currentRiderCode: String,
+    currentRiderRealName: String,
+    currentUserRole: String,
+    webAppUrl: String,
+    sharedPreferences: SharedPreferences,
+    coroutineScope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context
+) {
+    val isDark = LocalThemeIsDark.current
+    var pupCode by remember { mutableStateOf("") }
+    var selectedDriver by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
+    var driversList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+    var expanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        db.collection("pup_drivers")
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null) {
+                    val list = mutableListOf<Map<String, Any>>()
+                    for (doc in snapshot.documents) {
+                        val data = doc.data
+                        if (data != null) {
+                            list.add(data)
+                        }
+                    }
+                    driversList = list
+                }
+            }
+    }
+
+    val ocrPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    if (bitmap != null) {
+                        val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+                        recognizer.process(inputImage)
+                            .addOnSuccessListener { visionText ->
+                                val code = extractPupCode(visionText.text)
+                                if (code != null) {
+                                    pupCode = code
+                                    Toast.makeText(context, "Đã tìm thấy mã PUP: $code", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Lỗi mở ảnh: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Text(
+                "CHUYỂN PICK NHIỆM VỤ",
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 20.sp,
+                color = ThemePrimary,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        item {
+            GlassmorphicCard(
+                modifier = Modifier.fillMaxWidth(),
+                borderColor = getGlassBorderColor(isDark),
+                glowColor = ThemeCyan
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Button 1: Chọn Ảnh để quét mã PUP
+                    Premium3DButton(
+                        onClick = {
+                            ocrPhotoLauncher.launch("image/*")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = ThemePrimary,
+                        shadowColor = ThemeAccent.copy(alpha = 0.5f)
+                    ) {
+                        Icon3D(
+                            imageVector = Icons.Default.Image,
+                            contentDescription = "Chọn ảnh quét PUP",
+                            tint = getButtonTextColor(),
+                            size = 20.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("CHỌN ẢNH NHIỆM VỤ (OCR)", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                    }
+
+                    // TextField: Mã PUP
+                    OutlinedTextField(
+                        value = pupCode,
+                        onValueChange = { pupCode = it },
+                        placeholder = { Text("Mã PUP (Pickup Point ID)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = getTextColor(isDark),
+                            unfocusedTextColor = getTextColor(isDark),
+                            focusedBorderColor = ThemePrimary,
+                            unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                            unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                            focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                        )
+                    )
+
+                    // Dropdown/Selector: Chuyển Rider nhận
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedTextField(
+                            value = selectedDriver,
+                            onValueChange = {},
+                            readOnly = true,
+                            placeholder = { Text("Chuyển Rider nhận", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { expanded = true },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                            ),
+                            trailingIcon = {
+                                IconButton(onClick = { expanded = true }) {
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                }
+                            }
+                        )
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier
+                                .fillMaxWidth(0.85f)
+                                .background(getThemeSurfaceColor(isDark))
+                        ) {
+                            if (driversList.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("Chưa cấu hình Rider nhận (Liên hệ Admin)", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                    onClick = { expanded = false }
+                                )
+                            } else {
+                                driversList.forEachIndexed { index, driver ->
+                                    val name = driver["name"]?.toString() ?: ""
+                                    val code = driver["code"]?.toString() ?: ""
+                                    val displayText = "$name - $code"
+                                    if (index > 0) {
+                                        Divider(
+                                            color = getGlassBorderColor(isDark).copy(alpha = 0.2f),
+                                            thickness = 1.dp
+                                        )
+                                    }
+                                    DropdownMenuItem(
+                                        text = { Text(displayText, color = getTextColor(isDark)) },
+                                        onClick = {
+                                            selectedDriver = displayText
+                                            expanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Button Chuyển
+                    Premium3DButton(
+                        onClick = {
+                            if (pupCode.isBlank()) {
+                                Toast.makeText(context, "Vui lòng nhập hoặc quét mã PUP!", Toast.LENGTH_SHORT).show()
+                                return@Premium3DButton
+                            }
+                            if (selectedDriver.isBlank()) {
+                                Toast.makeText(context, "Vui lòng chọn Rider nhận!", Toast.LENGTH_SHORT).show()
+                                return@Premium3DButton
+                            }
+                            isSending = true
+                            val timeString = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault()).format(Date())
+                            val senderName = if (currentUserRole == "Admin") {
+                                currentUserName
+                            } else {
+                                val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+                                if (finalRiderRealName.isNotBlank()) {
+                                    "$finalRiderRealName ($currentRiderCode)"
+                                } else {
+                                    "$currentUserName ($currentRiderCode)"
+                                }
+                            }
+
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val client = okhttp3.OkHttpClient()
+                                    val bodyJson = JSONObject().apply {
+                                        put("action", "chuyen_pick")
+                                        put("riderName", senderName)
+                                        put("pupCode", pupCode.trim().uppercase(Locale.ROOT))
+                                        put("receiverRider", selectedDriver)
+                                        put("timestamp", timeString)
+                                        put("password", sharedPreferences.getString("sheet_password", "") ?: "")
+                                    }
+                                    val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                    val request = okhttp3.Request.Builder()
+                                        .url(webAppUrl)
+                                        .post(body)
+                                        .build()
+
+                                    client.newCall(request).execute().use { response ->
+                                        val responseBody = response.body?.string()
+                                        withContext(Dispatchers.Main) {
+                                            isSending = false
+                                            if (response.isSuccessful && responseBody != null) {
+                                                Toast.makeText(context, "Chuyển Pick thành công!", Toast.LENGTH_SHORT).show()
+                                                pupCode = ""
+                                                selectedDriver = ""
+                                            } else {
+                                                Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        isSending = false
+                                        Toast.makeText(context, "Lỗi mạng: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isSending,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(58.dp),
+                        containerBrush = Brush.linearGradient(listOf(ThemePrimary, ThemeAccent)),
+                        shadowColor = ThemeAccent.copy(alpha = 0.5f)
+                    ) {
+                        if (isSending) {
+                            CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
+                        } else {
+                            Icon3D(
+                                imageVector = Icons.Default.SwapHoriz,
+                                contentDescription = "Chuyển",
+                                tint = getButtonTextColor(),
+                                size = 20.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("CHUYỂN", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
