@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
@@ -202,6 +203,15 @@ fun Premium3DButton(
                     ),
                     shape = RoundedCornerShape(12.dp)
                 )
+                .drawWithContent {
+                    drawContent()
+                    if (enabled) {
+                        drawRoundRect(
+                            color = Color.White.copy(alpha = 0.15f),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(12.dp.toPx(), 12.dp.toPx())
+                        )
+                    }
+                }
                 .border(
                     width = 1.dp,
                     color = Color.White.copy(alpha = 0.25f),
@@ -228,11 +238,13 @@ fun Premium3DButton(
     shadowColor: Color,
     content: @Composable RowScope.() -> Unit
 ) {
+    val c1 = containerColor.copy(alpha = 0.85f)
+    val c2 = containerColor.copy(alpha = 0.65f)
     Premium3DButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        containerBrush = Brush.verticalGradient(listOf(containerColor.copy(alpha = 0.9f), containerColor)),
+        containerBrush = Brush.linearGradient(listOf(c1, c2)),
         shadowColor = shadowColor,
         content = content
     )
@@ -1384,34 +1396,39 @@ fun ShopeeAutoPrintApp(
                                 Spacer(modifier = Modifier.height(8.dp))
 
                                 Premium3DButton(
-                                     onClick = {
-                                         focusManager.clearFocus()
-                                         sendPrintRequest(orderCode)
-                                         orderCode = ""
-                                     },
-                                     enabled = !isSending && orderCode.isNotBlank(),
-                                     modifier = Modifier
-                                         .fillMaxWidth()
-                                         .height(64.dp),
-                                     containerBrush = Brush.linearGradient(
-                                         colors = if (isSending) listOf(Color.Gray, Color.DarkGray)
-                                         else listOf(ThemePrimary, ThemeAccent)
-                                     ),
-                                     shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
-                                 ) {
-                                     if (isSending) {
-                                         CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
-                                     } else {
-                                         Row(
-                                             verticalAlignment = Alignment.CenterVertically,
-                                             horizontalArrangement = Arrangement.Center
-                                         ) {
-                                             Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = getButtonTextColor())
-                                             Spacer(modifier = Modifier.width(8.dp))
-                                             Text("TRUYỀN IN CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = getButtonTextColor())
-                                         }
-                                     }
-                                 }
+                                    onClick = {
+                                        if (isSending) return@Premium3DButton
+                                        if (orderCode.isBlank()) {
+                                            Toast.makeText(context, "Vui lòng nhập hoặc quét mã để in!", Toast.LENGTH_SHORT).show()
+                                            return@Premium3DButton
+                                        }
+                                        focusManager.clearFocus()
+                                        sendPrintRequest(orderCode)
+                                        orderCode = ""
+                                    },
+                                    enabled = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(64.dp),
+                                    containerBrush = Brush.linearGradient(
+                                        colors = if (isSending) listOf(Color.Gray.copy(alpha = 0.5f), Color.DarkGray.copy(alpha = 0.5f))
+                                        else listOf(ThemePrimary.copy(alpha = 0.85f), ThemeAccent.copy(alpha = 0.85f))
+                                    ),
+                                    shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
+                                ) {
+                                    if (isSending) {
+                                        CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
+                                    } else {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = getButtonTextColor())
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("IN NHANH CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = getButtonTextColor())
+                                        }
+                                    }
+                                }
 
                                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -1593,15 +1610,16 @@ fun UserAccountView(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text("Thông tin đăng nhập:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text("Email: $currentUserEmail", color = getTextColor(isDark), fontSize = 13.sp)
+                Spacer(modifier = Modifier.height(6.dp))
                 Text("Tên: $currentUserName", color = getTextColor(isDark), fontSize = 13.sp)
                 
                 val roleDisplayName = when (currentUserRole) {
                     "Driver" -> "Tài xế (Driver)"
                     else -> currentUserRole
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text("Vai trò: $roleDisplayName", color = ThemeAccent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -2012,6 +2030,9 @@ fun AdminRiderListSectionOnlyActive(db: FirebaseFirestore) {
                         val email = data["email"]?.toString() ?: ""
                         val name = data["name"]?.toString() ?: ""
                         val code = data["riderCode"]?.toString() ?: ""
+                        val isPrintLockedVal = data["isPrintLocked"] as? Boolean ?: false
+                        val isChuyenPickLockedVal = data["isChuyenPickLocked"] as? Boolean ?: false
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -2021,10 +2042,43 @@ fun AdminRiderListSectionOnlyActive(db: FirebaseFirestore) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(name, fontWeight = FontWeight.Bold, color = getTextColor(isDark))
                                 Text("Email: $email", fontSize = 12.sp, color = getTextColor(isDark).copy(alpha = 0.7f))
                                 Text("Mã Code: $code", fontSize = 12.sp, color = ThemeCyan, fontWeight = FontWeight.Medium)
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.material3.Checkbox(
+                                            checked = isPrintLockedVal,
+                                            onCheckedChange = { isChecked ->
+                                                db.collection("active_riders").document(email).update(
+                                                    "isPrintLocked", isChecked,
+                                                    "printLockedUntil", if (isChecked) Date(System.currentTimeMillis() + 24 * 3600 * 1000L) else null
+                                                )
+                                            },
+                                            colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = ThemePrimary)
+                                        )
+                                        Text("Khóa In", fontSize = 12.sp, color = getTextColor(isDark))
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        androidx.compose.material3.Checkbox(
+                                            checked = isChuyenPickLockedVal,
+                                            onCheckedChange = { isChecked ->
+                                                db.collection("active_riders").document(email).update(
+                                                    "isChuyenPickLocked", isChecked,
+                                                    "chuyenPickLockedUntil", if (isChecked) Date(System.currentTimeMillis() + 24 * 3600 * 1000L) else null
+                                                )
+                                            },
+                                            colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = ThemePrimary)
+                                        )
+                                        Text("Khóa Pick", fontSize = 12.sp, color = getTextColor(isDark))
+                                    }
+                                }
                             }
                         }
                     }
@@ -2622,16 +2676,48 @@ class ScanAnalyzer(
 fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String, error: String) {}
 
 fun extractPupCode(text: String): String? {
-    val clean = text.replace("\\s".toRegex(), "").uppercase(Locale.ROOT)
-    val regex = Regex("PUP[A-Z0-9]+")
-    val match = regex.find(clean)
-    if (match != null) return match.value
-    
-    // Fallback: Tìm số 5 hoặc 6 chữ số bắt đầu bằng 9
-    val backupRegex = Regex("9[0-9]{4,5}")
-    val backupMatch = backupRegex.find(clean)
-    if (backupMatch != null) return "PUP" + backupMatch.value
-    
+    if (text.isBlank()) return null
+    // Matches PUP (or OCR variants) + 8 date chars + 4-to-8 suffix chars
+    val regex = Regex("(?i)\\b(PUP|FUP|PLP|PU|P0P|PO[PD])\\s*([0-9OILSGZ]{8})\\s*([A-Z0-9]{4,8})\\b")
+    val match = regex.find(text)
+    if (match != null) {
+        val datePart = match.groupValues[2].uppercase(Locale.ROOT).map { char ->
+            when (char) {
+                'O' -> '0'
+                'I', 'L' -> '1'
+                'S' -> '5'
+                'G' -> '6'
+                'Z' -> '2'
+                else -> char
+            }
+        }.joinToString("")
+        val suffixPart = match.groupValues[3].uppercase(Locale.ROOT)
+        return "PUP" + datePart + suffixPart
+    }
+    // Fallback: search for PUP followed by digits/letters but with word boundaries
+    val simpleRegex = Regex("(?i)\\b(PUP|FUP|PLP|PU|P0P|PO[PD])\\s*([A-Z0-9]{12,16})\\b")
+    val simpleMatch = simpleRegex.find(text)
+    if (simpleMatch != null) {
+        val full = simpleMatch.groupValues[2].uppercase(Locale.ROOT)
+        val datePart = full.substring(0, 8).map { char ->
+            when (char) {
+                'O' -> '0'
+                'I', 'L' -> '1'
+                'S' -> '5'
+                'G' -> '6'
+                'Z' -> '2'
+                else -> char
+            }
+        }.joinToString("")
+        val suffixPart = full.substring(8)
+        return "PUP" + datePart + suffixPart
+    }
+    // Backup fallback: Just find 9 followed by 4 or 5 digits
+    val backupRegex = Regex("\\b9[0-9]{4,5}\\b")
+    val backupMatch = backupRegex.find(text)
+    if (backupMatch != null) {
+        return "PUP" + backupMatch.value
+    }
     return null
 }
 
@@ -3344,6 +3430,7 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
     val context = LocalContext.current
     var driverName by remember { mutableStateOf("") }
     var driverCode by remember { mutableStateOf("") }
+    var isOutHub by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
     var driversList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
 
@@ -3401,6 +3488,20 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                 )
             )
             Spacer(modifier = Modifier.height(12.dp))
+            
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().clickable { isOutHub = !isOutHub }
+            ) {
+                Checkbox(
+                    checked = isOutHub,
+                    onCheckedChange = { isOutHub = it }
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Ngoài Hub (Out of Hub rider)", color = getTextColor(isDark))
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+
             Premium3DButton(
                 onClick = {
                     if (driverName.isBlank() || driverCode.isBlank()) {
@@ -3412,13 +3513,15 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                     db.collection("pup_drivers").document(codeDoc)
                         .set(mapOf(
                             "name" to driverName.trim(),
-                            "code" to codeDoc
+                            "code" to codeDoc,
+                            "isOutHub" to isOutHub
                         ))
                         .addOnSuccessListener {
                             isProcessing = false
                             Toast.makeText(context, "Đã thêm Rider nhận!", Toast.LENGTH_SHORT).show()
                             driverName = ""
                             driverCode = ""
+                            isOutHub = false
                         }
                         .addOnFailureListener { e ->
                             isProcessing = false
@@ -3443,6 +3546,8 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                     driversList.forEachIndexed { index, data ->
                         val code = data["code"]?.toString() ?: ""
                         val name = data["name"]?.toString() ?: ""
+                        val oHub = data["isOutHub"] as? Boolean ?: false
+                        val suffix = if (oHub) " (Ngoài Hub)" else ""
                         if (index > 0) {
                             Divider(
                                 color = getGlassBorderColor(isDark).copy(alpha = 0.4f),
@@ -3459,20 +3564,14 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("$name - $code", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
-                            Premium3DButton(
-                                onClick = {
-                                    db.collection("pup_drivers").document(code).delete()
-                                },
-                                modifier = Modifier.width(54.dp),
-                                containerColor = ThemePrimary,
-                                shadowColor = ThemeAccent.copy(alpha = 0.5f)
-                            ) {
+                            Text("$name - $code$suffix", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
+                            IconButton(onClick = {
+                                db.collection("pup_drivers").document(code).delete()
+                            }) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
                                     contentDescription = "Xóa Rider",
-                                    tint = getButtonTextColor(),
-                                    modifier = Modifier.size(20.dp)
+                                    tint = ThemePrimary
                                 )
                             }
                         }
@@ -3482,7 +3581,6 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
         }
     }
 }
-
 @Composable
 fun ChuyenPickView(
     db: FirebaseFirestore,
@@ -3553,6 +3651,8 @@ fun ChuyenPickView(
         }
     }
 
+    var searchDriverQuery by remember { mutableStateOf("") }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -3599,7 +3699,7 @@ fun ChuyenPickView(
                             size = 20.dp
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("CHỌN ẢNH NHIỆM VỤ (OCR)", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                        Text("Chọn ảnh cần chuyển", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                     }
 
                     // TextField: Mã PUP
@@ -3628,41 +3728,70 @@ fun ChuyenPickView(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { expanded = true },
+                            enabled = false, // disabled to pass click event to container clickable
                             colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = getTextColor(isDark),
-                                unfocusedTextColor = getTextColor(isDark),
-                                focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                                disabledTextColor = getTextColor(isDark),
+                                disabledBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                disabledContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                disabledPlaceholderColor = getTextColor(isDark).copy(alpha = 0.6f)
                             ),
                             trailingIcon = {
                                 IconButton(onClick = { expanded = true }) {
-                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown")
+                                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown", tint = getTextColor(isDark))
                                 }
                             }
+                        )
+                        // Invisible clickable overlay to ensure clicks work anywhere on the field
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .clickable { expanded = true }
                         )
                         DropdownMenu(
                             expanded = expanded,
                             onDismissRequest = { expanded = false },
                             modifier = Modifier
                                 .fillMaxWidth(0.85f)
-                                .background(getThemeSurfaceColor(isDark))
+                                .heightIn(max = 300.dp)
+                                .background(if (isDark) Color(0xFF1E2142) else Color.White) // Solid contrasting background
                         ) {
-                            if (driversList.isEmpty()) {
+                            OutlinedTextField(
+                                value = searchDriverQuery,
+                                onValueChange = { searchDriverQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp),
+                                placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                singleLine = true,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedTextColor = getTextColor(isDark),
+                                    unfocusedTextColor = getTextColor(isDark),
+                                    focusedBorderColor = ThemePrimary,
+                                    unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f)
+                                )
+                            )
+
+                            val filteredDrivers = driversList.filter { driver ->
+                                val name = driver["name"]?.toString() ?: ""
+                                val code = driver["code"]?.toString() ?: ""
+                                name.contains(searchDriverQuery, ignoreCase = true) || code.contains(searchDriverQuery, ignoreCase = true)
+                            }
+
+                            if (filteredDrivers.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("Chưa cấu hình Rider nhận (Liên hệ Admin)", color = getTextColor(isDark).copy(alpha = 0.5f)) },
-                                    onClick = { expanded = false }
+                                    text = { Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                    onClick = { }
                                 )
                             } else {
-                                driversList.forEachIndexed { index, driver ->
+                                filteredDrivers.forEachIndexed { index, driver ->
                                     val name = driver["name"]?.toString() ?: ""
                                     val code = driver["code"]?.toString() ?: ""
                                     val displayText = "$name - $code"
                                     if (index > 0) {
                                         Divider(
-                                            color = getGlassBorderColor(isDark).copy(alpha = 0.2f),
-                                            thickness = 1.dp
+                                            color = getGlassBorderColor(isDark).copy(alpha = 0.4f),
+                                            thickness = 1.dp,
+                                            modifier = Modifier.padding(horizontal = 8.dp)
                                         )
                                     }
                                     DropdownMenuItem(
@@ -3725,6 +3854,17 @@ fun ChuyenPickView(
                                         withContext(Dispatchers.Main) {
                                             isSending = false
                                             if (response.isSuccessful && responseBody != null) {
+                                                // Save transfer log in Firestore transfers collection
+                                                val targetPupClean = pupCode.trim().uppercase(Locale.ROOT)
+                                                db.collection("transfers").document(targetPupClean)
+                                                    .set(mapOf(
+                                                        "pupCode" to targetPupClean,
+                                                        "senderEmail" to currentUserEmail,
+                                                        "senderName" to senderName,
+                                                        "receiverRider" to selectedDriver,
+                                                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                                    ))
+
                                                 Toast.makeText(context, "Chuyển Pick thành công!", Toast.LENGTH_SHORT).show()
                                                 pupCode = ""
                                                 selectedDriver = ""
@@ -3764,6 +3904,443 @@ fun ChuyenPickView(
                 }
             }
         }
+
+        // TỐ CÁO ĐẨY SAI
+        item {
+            var reportPupCode by remember { mutableStateOf("") }
+            var isReporting by remember { mutableStateOf(false) }
+
+            GlassmorphicCard(
+                modifier = Modifier.fillMaxWidth(),
+                borderColor = getGlassBorderColor(isDark).copy(alpha = 0.8f),
+                glowColor = ThemeAccent
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        "TỐ CÁO ĐẨY SAI",
+                        fontWeight = FontWeight.Bold,
+                        color = ThemeAccent,
+                        fontSize = 15.sp
+                    )
+
+                    OutlinedTextField(
+                        value = reportPupCode,
+                        onValueChange = { reportPupCode = it },
+                        placeholder = { Text("Nhập mã PUP bị đẩy sai", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = getTextColor(isDark),
+                            unfocusedTextColor = getTextColor(isDark),
+                            focusedBorderColor = ThemeAccent,
+                            unfocusedBorderColor = ThemeAccent.copy(alpha = 0.5f),
+                            unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                            focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                        )
+                    )
+
+                    Premium3DButton(
+                        onClick = {
+                            if (reportPupCode.isBlank()) {
+                                Toast.makeText(context, "Vui lòng nhập mã PUP cần tố cáo!", Toast.LENGTH_SHORT).show()
+                                return@Premium3DButton
+                            }
+                            val targetPup = reportPupCode.trim().uppercase(Locale.ROOT)
+                            isReporting = true
+
+                            // 1. Tìm thông tin người chuyển trong transfers
+                            db.collection("transfers").document(targetPup).get()
+                                .addOnSuccessListener { doc ->
+                                    if (!doc.exists()) {
+                                        isReporting = false
+                                        Toast.makeText(context, "Không tìm thấy thông tin chuyển cho mã PUP này!", Toast.LENGTH_LONG).show()
+                                    } else {
+                                        val reportedEmail = doc.getString("senderEmail") ?: ""
+                                        val reportedName = doc.getString("senderName") ?: ""
+                                        if (reportedEmail.isBlank()) {
+                                            isReporting = false
+                                            Toast.makeText(context, "Thông tin người gửi không hợp lệ!", Toast.LENGTH_SHORT).show()
+                                            return@addOnSuccessListener
+                                        }
+                                        if (reportedEmail == currentUserEmail) {
+                                            isReporting = false
+                                            Toast.makeText(context, "Bạn không thể tự tố cáo chính mình!", Toast.LENGTH_SHORT).show()
+                                            return@addOnSuccessListener
+                                        }
+
+                                        // 2. Thêm tố cáo mới
+                                        val reporterName = if (currentUserRole == "Admin") {
+                                            currentUserName
+                                        } else {
+                                            val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+                                            if (finalRiderRealName.isNotBlank()) "$finalRiderRealName ($currentRiderCode)" else "$currentUserName ($currentRiderCode)"
+                                        }
+
+                                        val reportId = "${reportedEmail}_${targetPup}_${System.currentTimeMillis()}"
+                                        val timestampStr = SimpleDateFormat("HH:mm:ss dd/MM/yyyy", Locale.getDefault()).format(Date())
+                                        val reportData = mapOf(
+                                            "pupCode" to targetPup,
+                                            "reporterEmail" to currentUserEmail,
+                                            "reporterName" to reporterName,
+                                            "reportedEmail" to reportedEmail,
+                                            "reportedName" to reportedName,
+                                            "timestamp" to timestampStr,
+                                            "timeMs" to System.currentTimeMillis()
+                                        )
+
+                                        db.collection("reports").document(reportId).set(reportData)
+                                            .addOnSuccessListener {
+                                                // 3. Tính toán hình phạt và khóa
+                                                db.collection("reports")
+                                                    .whereEqualTo("reportedEmail", reportedEmail)
+                                                    .get()
+                                                    .addOnSuccessListener { querySnapshot ->
+                                                        val allReports = querySnapshot.documents.mapNotNull { it.data }.sortedBy { it["timeMs"] as? Long ?: 0L }
+                                                        val nowMs = System.currentTimeMillis()
+                                                        val oneDayMs = 24 * 3600 * 1000L
+                                                        val oneWeekMs = 7 * 24 * 3600 * 1000L
+
+                                                        // Lọc tố cáo trong 24h qua và trong 7 ngày qua
+                                                        val reportsLast24h = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneDayMs }
+                                                        val reportsLast7d = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneWeekMs }
+
+                                                        var lockDurationMs = 0L
+                                                        var baseTimeMs = nowMs
+
+                                                        // Kiểm tra tuần (7 lần -> khóa 3 ngày)
+                                                        if (reportsLast7d.size >= 7) {
+                                                            lockDurationMs = 3 * 24 * 3600 * 1000L
+                                                            val thirdReportTime = reportsLast7d.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
+                                                            baseTimeMs = thirdReportTime
+                                                        }
+                                                        // Kiểm tra ngày (3 lần -> khóa 1 ngày)
+                                                        else if (reportsLast24h.size >= 3) {
+                                                            lockDurationMs = 24 * 3600 * 1000L
+                                                            val thirdReportTime = reportsLast24h.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
+                                                            baseTimeMs = thirdReportTime
+                                                        }
+
+                                                        if (lockDurationMs > 0L) {
+                                                            val lockUntilMs = baseTimeMs + lockDurationMs
+                                                            val lockUntilDate = Date(lockUntilMs)
+
+                                                            // Lấy danh sách thông tin tố cáo để lưu vào user
+                                                            val reportsListToStore = allReports.takeLast(7).map {
+                                                                mapOf(
+                                                                    "reporterName" to (it["reporterName"]?.toString() ?: ""),
+                                                                    "pupCode" to (it["pupCode"]?.toString() ?: ""),
+                                                                    "timestamp" to (it["timestamp"]?.toString() ?: "")
+                                                                )
+                                                            }
+
+                                                            db.collection("active_riders").document(reportedEmail)
+                                                                .update(mapOf(
+                                                                    "isChuyenPickLocked" to true,
+                                                                    "chuyenPickLockedUntil" to lockUntilDate,
+                                                                    "reports" to reportsListToStore
+                                                                ))
+                                                        }
+
+                                                        isReporting = false
+                                                        reportPupCode = ""
+                                                        Toast.makeText(context, "Tố cáo thành công!", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                    .addOnFailureListener {
+                                                        isReporting = false
+                                                        Toast.makeText(context, "Lỗi tính hình phạt: ${it.message}", Toast.LENGTH_SHORT).show()
+                                                    }
+                                            }
+                                            .addOnFailureListener { e ->
+                                                isReporting = false
+                                                Toast.makeText(context, "Lỗi tạo tố cáo: ${e.message}", Toast.LENGTH_SHORT).show()
+                                            }
+                                    }
+                                }
+                                .addOnFailureListener { e ->
+                                    isReporting = false
+                                    Toast.makeText(context, "Lỗi truy vấn: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                        },
+                        enabled = !isReporting,
+                        modifier = Modifier.fillMaxWidth(),
+                        containerColor = ThemeAccent.copy(alpha = 0.8f),
+                        shadowColor = ThemeAccent.copy(alpha = 0.4f)
+                    ) {
+                        if (isReporting) {
+                            CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
+                        } else {
+                            Text("TỐ CÁO", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // HỖ TRỢ ĐẨY PICK (CHỈ ADMIN THẤY)
+        if (currentUserRole == "Admin") {
+            item {
+                var supportPup by remember { mutableStateOf("") }
+                var supportTargetDriver by remember { mutableStateOf("") }
+                var supportAddress by remember { mutableStateOf("") }
+                var isSupportSubmitting by remember { mutableStateOf(false) }
+
+                var activeSupportList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+
+                // Load active support pushes
+                LaunchedEffect(Unit) {
+                    db.collection("support_pushes")
+                        .orderBy("timeMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .addSnapshotListener { snap, err ->
+                            if (snap != null) {
+                                activeSupportList = snap.documents.mapNotNull { it.data }
+                            }
+                        }
+                }
+
+                GlassmorphicCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = getGlassBorderColor(isDark),
+                    glowColor = ThemeCyan
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            "HỖ TRỢ ĐẨY PICK (CHỈ ADMIN THẤY)",
+                            fontWeight = FontWeight.Bold,
+                            color = ThemePrimary,
+                            fontSize = 15.sp
+                        )
+
+                        OutlinedTextField(
+                            value = supportPup,
+                            onValueChange = { supportPup = it },
+                            placeholder = { Text("Nhập mã PUP cần hỗ trợ", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                            )
+                        )
+
+                        // Dropdown for Rider ngoài hub
+                        val outHubDrivers = driversList.filter { it["isOutHub"] as? Boolean ?: false }
+                        var supportDropdownExpanded by remember { mutableStateOf(false) }
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedTextField(
+                                value = supportTargetDriver,
+                                onValueChange = {},
+                                readOnly = true,
+                                placeholder = { Text("Chọn Rider ngoài Hub (hoặc điền địa chỉ)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = false,
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    disabledTextColor = getTextColor(isDark),
+                                    disabledBorderColor = ThemePrimary.copy(alpha = 0.5f),
+                                    disabledContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                    disabledPlaceholderColor = getTextColor(isDark).copy(alpha = 0.6f)
+                                ),
+                                trailingIcon = {
+                                    IconButton(onClick = { supportDropdownExpanded = true }) {
+                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown", tint = getTextColor(isDark))
+                                    }
+                                }
+                            )
+                            // Invisible clickable overlay to ensure clicks work anywhere on the field
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable { supportDropdownExpanded = true }
+                            )
+                            DropdownMenu(
+                                expanded = supportDropdownExpanded,
+                                onDismissRequest = { supportDropdownExpanded = false },
+                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFF1E2142) else Color.White)
+                            ) {
+                                if (outHubDrivers.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("Chưa có Rider ngoài Hub nào", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                        onClick = { supportDropdownExpanded = false }
+                                    )
+                                } else {
+                                    outHubDrivers.forEachIndexed { i, dr ->
+                                        val n = dr["name"]?.toString() ?: ""
+                                        val c = dr["code"]?.toString() ?: ""
+                                        val disp = "$n - $c"
+                                        DropdownMenuItem(
+                                            text = { Text(disp, color = getTextColor(isDark)) },
+                                            onClick = {
+                                                supportTargetDriver = disp
+                                                supportDropdownExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = supportAddress,
+                            onValueChange = { supportAddress = it },
+                            placeholder = { Text("Hoặc ghi rõ Địa Chỉ / Rider khác", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                            )
+                        )
+
+                        Premium3DButton(
+                            onClick = {
+                                if (supportPup.isBlank()) {
+                                    Toast.makeText(context, "Vui lòng nhập mã PUP!", Toast.LENGTH_SHORT).show()
+                                    return@Premium3DButton
+                                }
+                                val receiverStr = supportTargetDriver.ifBlank { supportAddress }
+                                if (receiverStr.isBlank()) {
+                                    Toast.makeText(context, "Vui lòng chọn Rider hoặc điền địa chỉ!", Toast.LENGTH_SHORT).show()
+                                    return@Premium3DButton
+                                }
+
+                                isSupportSubmitting = true
+                                val pCode = supportPup.trim().uppercase(Locale.ROOT)
+                                val docId = "${pCode}_${System.currentTimeMillis()}"
+
+                                db.collection("support_pushes").document(docId).set(mapOf(
+                                    "docId" to docId,
+                                    "pupCode" to pCode,
+                                    "receiver" to receiverStr,
+                                    "timeMs" to System.currentTimeMillis(),
+                                    "status" to "Pending"
+                                )).addOnSuccessListener {
+                                    isSupportSubmitting = false
+                                    supportPup = ""
+                                    supportTargetDriver = ""
+                                    supportAddress = ""
+                                    Toast.makeText(context, "Đã gửi yêu cầu hỗ trợ!", Toast.LENGTH_SHORT).show()
+                                }.addOnFailureListener {
+                                    isSupportSubmitting = false
+                                    Toast.makeText(context, "Lỗi: ${it.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = !isSupportSubmitting,
+                            modifier = Modifier.fillMaxWidth(),
+                            containerColor = ThemePrimary,
+                            shadowColor = ThemeAccent.copy(alpha = 0.5f)
+                        ) {
+                            Text("GỬI YÊU CẦU", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
+                        }
+
+                        if (activeSupportList.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("Danh sách yêu cầu hỗ trợ:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
+
+                            activeSupportList.forEach { item ->
+                                val dId = item["docId"]?.toString() ?: ""
+                                val p = item["pupCode"]?.toString() ?: ""
+                                val rec = item["receiver"]?.toString() ?: ""
+                                val status = item["status"]?.toString() ?: "Pending"
+
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    border = BorderStroke(1.dp, getGlassBorderColor(isDark).copy(alpha = 0.5f)),
+                                    colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f))
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("PUP: $p", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
+                                            Text("Gửi tới: $rec", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
+                                            Text("Trạng thái: $status", color = if (status == "Pushed") Color.Green else ThemeAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                        if (status == "Pending") {
+                                            var isPushingSupport by remember { mutableStateOf(false) }
+                                            Premium3DButton(
+                                                onClick = {
+                                                    isPushingSupport = true
+                                                    coroutineScope.launch(Dispatchers.IO) {
+                                                        try {
+                                                            val client = okhttp3.OkHttpClient()
+                                                            val timeString = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault()).format(Date())
+                                                            val bodyJson = JSONObject().apply {
+                                                                put("action", "chuyen_pick")
+                                                                put("riderName", "$currentUserName (Admin Support)")
+                                                                put("pupCode", p)
+                                                                put("receiverRider", rec)
+                                                                put("timestamp", timeString)
+                                                                put("password", sharedPreferences.getString("sheet_password", "") ?: "")
+                                                            }
+                                                            val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                                            val request = okhttp3.Request.Builder()
+                                                                .url(webAppUrl)
+                                                                .post(body)
+                                                                .build()
+
+                                                            client.newCall(request).execute().use { response ->
+                                                                val responseBody = response.body?.string()
+                                                                withContext(Dispatchers.Main) {
+                                                                    isPushingSupport = false
+                                                                    if (response.isSuccessful && responseBody != null) {
+                                                                        db.collection("support_pushes").document(dId)
+                                                                            .update("status", "Pushed")
+
+                                                                        db.collection("transfers").document(p).set(mapOf(
+                                                                            "pupCode" to p,
+                                                                            "senderEmail" to currentUserEmail,
+                                                                            "senderName" to "$currentUserName (Admin Support)",
+                                                                            "receiverRider" to rec,
+                                                                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                                                        ))
+
+                                                                        Toast.makeText(context, "Hỗ trợ đẩy thành công!", Toast.LENGTH_SHORT).show()
+                                                                    } else {
+                                                                        Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
+                                                                    }
+                                                                }
+                                                            }
+                                                        } catch (e: Exception) {
+                                                            withContext(Dispatchers.Main) {
+                                                                isPushingSupport = false
+                                                                Toast.makeText(context, "Lỗi mạng: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                enabled = !isPushingSupport,
+                                                modifier = Modifier.width(90.dp).height(38.dp),
+                                                containerColor = ThemePrimary,
+                                                shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                                            ) {
+                                                if (isPushingSupport) {
+                                                    CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(16.dp))
+                                                } else {
+                                                    Text("Chuyển", color = getButtonTextColor(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+        }
+    }
     }
 }
 
