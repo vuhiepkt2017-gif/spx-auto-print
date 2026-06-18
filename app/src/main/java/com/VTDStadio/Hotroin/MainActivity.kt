@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -556,6 +557,12 @@ fun ShopeeAutoPrintApp(
     var currentUserRole by remember { mutableStateOf(sharedPreferences.getString("user_role", "") ?: "") }
     var currentRiderCode by remember { mutableStateOf(sharedPreferences.getString("rider_code", "") ?: "") }
 
+    var isPrintLocked by remember { mutableStateOf(false) }
+    var isChuyenPickLocked by remember { mutableStateOf(false) }
+    var printLockedUntil by remember { mutableStateOf<Date?>(null) }
+    var chuyenPickLockedUntil by remember { mutableStateOf<Date?>(null) }
+    var chuyenPickLockedReports by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+
     // App Configurations (Admin Synced)
     var webAppUrl by remember { mutableStateOf("https://script.google.com/macros/s/AKfycbzdPN27raSNnCeH19dpKUYzWmccLkCjFyoLjKlxEeKg3cLOJA4JezXZbboEgG6g0GpQZA/exec") }
     var autoSubmitOnScan by remember { mutableStateOf(sharedPreferences.getBoolean("auto_submit_on_scan", false)) }
@@ -888,6 +895,26 @@ fun ShopeeAutoPrintApp(
     LaunchedEffect(currentUserRole) {
         if (currentUserRole != "Admin") {
             activeTab = 0
+        }
+    }
+
+    DisposableEffect(isLoggedIn, currentUserEmail) {
+        var userLockListener: ListenerRegistration? = null
+        if (isLoggedIn && currentUserEmail.isNotBlank()) {
+            userLockListener = db.collection("active_riders").document(currentUserEmail)
+                .addSnapshotListener { snapshot, error ->
+                    if (snapshot != null && snapshot.exists()) {
+                        isPrintLocked = snapshot.getBoolean("isPrintLocked") ?: false
+                        isChuyenPickLocked = snapshot.getBoolean("isChuyenPickLocked") ?: false
+                        printLockedUntil = snapshot.getDate("printLockedUntil")
+                        chuyenPickLockedUntil = snapshot.getDate("chuyenPickLockedUntil")
+                        val reportsList = snapshot.get("reports") as? List<Map<String, Any>>
+                        chuyenPickLockedReports = reportsList ?: emptyList()
+                    }
+                }
+        }
+        onDispose {
+            userLockListener?.remove()
         }
     }
 
@@ -1227,223 +1254,229 @@ fun ShopeeAutoPrintApp(
                     AIParticleBackground()
 
                     if (activeTab == 0) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            AnimatedVisibility(visible = statusText.isNotEmpty()) {
-                                Card(
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (statusText.contains("thành công")) Color(0xFF1B5E20)
-                                        else if (statusText.contains("Lỗi") || statusText.contains("Thất bại")) Color(0xFFB71C1C)
-                                        else Color(0xFFE65100)
-                                    ),
+                        val isPrintLockedActive = isPrintLocked && (printLockedUntil == null || printLockedUntil!!.time > System.currentTimeMillis())
+                        if (isPrintLockedActive) {
+                            val remainingText = getRemainingTimeText(printLockedUntil, isPrintLockedActive)
+                            PrintLockedScreen(remainingText)
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                AnimatedVisibility(visible = statusText.isNotEmpty()) {
+                                    Card(
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (statusText.contains("thành công")) Color(0xFF1B5E20)
+                                            else if (statusText.contains("Lỗi") || statusText.contains("Thất bại")) Color(0xFFB71C1C)
+                                            else Color(0xFFE65100)
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(bottom = 12.dp)
+                                    ) {
+                                        Text(
+                                            text = statusText,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(12.dp),
+                                            textAlign = TextAlign.Center,
+                                            fontWeight = FontWeight.Medium,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = orderCode,
+                                    onValueChange = { orderCode = it },
+                                    placeholder = { Text("Danh sách mã vận đơn (Mỗi mã 1 dòng)", color = getTextColor(isDark).copy(alpha = 0.5f)) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(bottom = 12.dp)
-                                ) {
-                                    Text(
-                                        text = statusText,
-                                        color = Color.White,
-                                        modifier = Modifier.padding(12.dp),
-                                        textAlign = TextAlign.Center,
-                                        fontWeight = FontWeight.Medium,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = orderCode,
-                                onValueChange = { orderCode = it },
-                                placeholder = { Text("Danh sách mã vận đơn (Mỗi mã 1 dòng)", color = getTextColor(isDark).copy(alpha = 0.5f)) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 120.dp, max = 220.dp),
-                                singleLine = false,
-                                maxLines = 15,
-                                trailingIcon = {
-                                    if (orderCode.isNotEmpty()) {
-                                        IconButton(onClick = { orderCode = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = "Xóa tất cả", tint = getTextColor(isDark))
+                                        .heightIn(min = 120.dp, max = 220.dp),
+                                    singleLine = false,
+                                    maxLines = 15,
+                                    trailingIcon = {
+                                        if (orderCode.isNotEmpty()) {
+                                            IconButton(onClick = { orderCode = "" }) {
+                                                Icon(Icons.Default.Clear, contentDescription = "Xóa tất cả", tint = getTextColor(isDark))
+                                            }
                                         }
-                                    }
-                                },
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = getTextColor(isDark),
-                                    unfocusedTextColor = getTextColor(isDark),
-                                    focusedBorderColor = ThemePrimary,
-                                    unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
-                                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                                    },
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = getTextColor(isDark),
+                                        unfocusedTextColor = getTextColor(isDark),
+                                        focusedBorderColor = ThemePrimary,
+                                        unfocusedBorderColor = if (isDark) ThemePrimary.copy(alpha = 0.4f) else ThemePrimary.copy(alpha = 0.5f),
+                                        unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                        focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                                    )
                                 )
-                            )
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                // Button 1: Quét Mã Vạch (Live camera stream)
-                                Premium3DButton(
-                                     onClick = {
-                                         isOcrMode = false
-                                         if (hasCameraPermission) {
-                                             showCameraScanner = true
-                                         } else {
-                                             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                         }
-                                     },
-                                     modifier = Modifier.weight(1f),
-                                     containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
-                                     shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                     Icon(Icons.Default.QrCodeScanner, contentDescription = "Quét vạch", tint = getTextColor(isDark), modifier = Modifier.size(18.dp))
-                                     Spacer(modifier = Modifier.width(4.dp))
-                                     Text("Quét Vạch", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
+                                    // Button 1: Quét Mã Vạch (Live camera stream)
+                                    Premium3DButton(
+                                         onClick = {
+                                             isOcrMode = false
+                                             if (hasCameraPermission) {
+                                                 showCameraScanner = true
+                                             } else {
+                                                 requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                             }
+                                         },
+                                         modifier = Modifier.weight(1f),
+                                         containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
+                                         shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
+                                    ) {
+                                         Icon(Icons.Default.QrCodeScanner, contentDescription = "Quét vạch", tint = getTextColor(isDark), modifier = Modifier.size(18.dp))
+                                         Spacer(modifier = Modifier.width(4.dp))
+                                         Text("Quét Vạch", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
 
-                                // Button 2: Chụp Quét Chữ (Take photo to OCR)
-                                Premium3DButton(
-                                     onClick = {
-                                         isOcrMode = true
-                                         if (hasCameraPermission) {
-                                             showCameraScanner = true
-                                         } else {
-                                             requestPermissionLauncher.launch(Manifest.permission.CAMERA)
-                                         }
-                                     },
-                                     modifier = Modifier.weight(1f),
-                                     containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
-                                     shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
-                                ) {
-                                     Icon(Icons.Default.CameraAlt, contentDescription = "Chụp quét chữ", tint = ThemeCyan, modifier = Modifier.size(18.dp))
-                                     Spacer(modifier = Modifier.width(4.dp))
-                                     Text("Chụp Chữ", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                }
+                                    // Button 2: Chụp Quét Chữ (Take photo to OCR)
+                                    Premium3DButton(
+                                         onClick = {
+                                             isOcrMode = true
+                                             if (hasCameraPermission) {
+                                                 showCameraScanner = true
+                                             } else {
+                                                 requestPermissionLauncher.launch(Manifest.permission.CAMERA)
+                                             }
+                                         },
+                                         modifier = Modifier.weight(1f),
+                                         containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
+                                         shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
+                                    ) {
+                                         Icon(Icons.Default.CameraAlt, contentDescription = "Chụp quét chữ", tint = ThemeCyan, modifier = Modifier.size(18.dp))
+                                         Spacer(modifier = Modifier.width(4.dp))
+                                         Text("Chụp Chữ", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
 
-                                // Button 3: Chọn Ảnh Quét (Select from gallery)
-                                Premium3DButton(
-                                     onClick = {
-                                         photoPickerLauncher.launch("image/*")
-                                     },
-                                     modifier = Modifier.weight(1f),
-                                     containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
-                                     shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
-                                 ) {
-                                     Icon(Icons.Default.Image, contentDescription = "Chọn ảnh quét", tint = ThemePrimary, modifier = Modifier.size(18.dp))
-                                     Spacer(modifier = Modifier.width(4.dp))
-                                     Text("Chọn Ảnh", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                 }
-                            }
-
-                            Spacer(modifier = Modifier.height(8.dp))
-
-                            Premium3DButton(
-                                 onClick = {
-                                     focusManager.clearFocus()
-                                     sendPrintRequest(orderCode)
-                                     orderCode = ""
-                                 },
-                                 enabled = !isSending && orderCode.isNotBlank(),
-                                 modifier = Modifier
-                                     .fillMaxWidth()
-                                     .height(64.dp),
-                                 containerBrush = Brush.linearGradient(
-                                     colors = if (isSending) listOf(Color.Gray, Color.DarkGray)
-                                     else listOf(ThemePrimary, ThemeAccent)
-                                 ),
-                                 shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
-                             ) {
-                                 if (isSending) {
-                                     CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
-                                 } else {
-                                     Row(
-                                         verticalAlignment = Alignment.CenterVertically,
-                                         horizontalArrangement = Arrangement.Center
+                                    // Button 3: Chọn Ảnh Quét (Select from gallery)
+                                    Premium3DButton(
+                                         onClick = {
+                                             photoPickerLauncher.launch("image/*")
+                                         },
+                                         modifier = Modifier.weight(1f),
+                                         containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f),
+                                         shadowColor = getGlassBorderColor(isDark).copy(alpha = 0.5f)
                                      ) {
-                                         Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = getButtonTextColor())
-                                         Spacer(modifier = Modifier.width(8.dp))
-                                         Text("TRUYỀN IN CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = getButtonTextColor())
+                                         Icon(Icons.Default.Image, contentDescription = "Chọn ảnh quét", tint = ThemePrimary, modifier = Modifier.size(18.dp))
+                                         Spacer(modifier = Modifier.width(4.dp))
+                                         Text("Chọn Ảnh", color = getTextColor(isDark), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                     }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Premium3DButton(
+                                     onClick = {
+                                         focusManager.clearFocus()
+                                         sendPrintRequest(orderCode)
+                                         orderCode = ""
+                                     },
+                                     enabled = !isSending && orderCode.isNotBlank(),
+                                     modifier = Modifier
+                                         .fillMaxWidth()
+                                         .height(64.dp),
+                                     containerBrush = Brush.linearGradient(
+                                         colors = if (isSending) listOf(Color.Gray, Color.DarkGray)
+                                         else listOf(ThemePrimary, ThemeAccent)
+                                     ),
+                                     shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
+                                 ) {
+                                     if (isSending) {
+                                         CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(24.dp))
+                                     } else {
+                                         Row(
+                                             verticalAlignment = Alignment.CenterVertically,
+                                             horizontalArrangement = Arrangement.Center
+                                         ) {
+                                             Icon(Icons.Default.CloudUpload, contentDescription = "Truyền in", tint = getButtonTextColor())
+                                             Spacer(modifier = Modifier.width(8.dp))
+                                             Text("TRUYỀN IN CLOUD", fontWeight = FontWeight.ExtraBold, fontSize = 16.sp, color = getButtonTextColor())
+                                         }
                                      }
                                  }
-                             }
 
-                            Spacer(modifier = Modifier.height(24.dp))
+                                Spacer(modifier = Modifier.height(24.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("LỊCH SỬ GỬI TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark).copy(alpha = 0.6f), fontSize = 14.sp)
-                                if (historyList.isNotEmpty() && currentUserRole == "Admin") {
-                                    Text(
-                                        "XÓA HẾT",
-                                        color = ThemePrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.clickable { updateHistoryList(emptyList()) }
-                                    )
-                                }
-                            }
-
-                            Divider(modifier = Modifier.padding(vertical = 8.dp), color = getGlassBorderColor(isDark))
-
-                            if (historyList.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("Chưa có lịch sử gửi", color = getTextColor(isDark).copy(alpha = 0.4f))
+                                    Text("LỊCH SỬ GỬI TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark).copy(alpha = 0.6f), fontSize = 14.sp)
+                                    if (historyList.isNotEmpty() && currentUserRole == "Admin") {
+                                        Text(
+                                            "XÓA HẾT",
+                                            color = ThemePrimary,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clickable { updateHistoryList(emptyList()) }
+                                        )
+                                    }
                                 }
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    items(historyList, key = { it.code + "_" + it.timestamp }) { item ->
-                                        Card(
-                                            colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-                                            border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                                            modifier = Modifier.fillMaxWidth()
-                                        ) {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(16.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
-                                                verticalAlignment = Alignment.CenterVertically
+
+                                Divider(modifier = Modifier.padding(vertical = 8.dp), color = getGlassBorderColor(isDark))
+
+                                if (historyList.isEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("Chưa có lịch sử gửi", color = getTextColor(isDark).copy(alpha = 0.4f))
+                                    }
+                                } else {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        items(historyList, key = { it.code + "_" + it.timestamp }) { item ->
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+                                                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                                                modifier = Modifier.fillMaxWidth()
                                             ) {
-                                                Column {
-                                                    Text(item.code, fontWeight = FontWeight.Bold, color = getTextColor(isDark))
-                                                    Text(item.timestamp, fontSize = 12.sp, color = getTextColor(isDark).copy(alpha = 0.6f))
-                                                }
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    val statusColor = when {
-                                                        item.status.contains("thành công") || item.status.contains("Thành công") -> Color(0xFF4CAF50)
-                                                        item.status.contains("Đang") -> Color(0xFFFF9800)
-                                                        else -> ThemePrimary
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(16.dp),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column {
+                                                        Text(item.code, fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                                                        Text(item.timestamp, fontSize = 12.sp, color = getTextColor(isDark).copy(alpha = 0.6f))
                                                     }
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(8.dp)
-                                                            .background(statusColor, shape = CircleShape)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text(
-                                                        item.status,
-                                                        color = statusColor,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = FontWeight.Medium
-                                                    )
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        val statusColor = when {
+                                                            item.status.contains("thành công") || item.status.contains("Thành công") -> Color(0xFF4CAF50)
+                                                            item.status.contains("Đang") -> Color(0xFFFF9800)
+                                                            else -> ThemePrimary
+                                                        }
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(8.dp)
+                                                                .background(statusColor, shape = CircleShape)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text(
+                                                            item.status,
+                                                            color = statusColor,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                    }
                                                 }
                                             }
                                         }
@@ -1452,18 +1485,28 @@ fun ShopeeAutoPrintApp(
                             }
                         }
                     } else if (activeTab == 1) {
-                        ChuyenPickView(
-                            db = db,
-                            currentUserEmail = currentUserEmail,
-                            currentUserName = currentUserName,
-                            currentRiderCode = currentRiderCode,
-                            currentRiderRealName = currentRiderRealName,
-                            currentUserRole = currentUserRole,
-                            webAppUrl = webAppUrl,
-                            sharedPreferences = sharedPreferences,
-                            coroutineScope = coroutineScope,
-                            context = context
-                        )
+                        val isChuyenPickLockedActive = isChuyenPickLocked && (chuyenPickLockedUntil == null || chuyenPickLockedUntil!!.time > System.currentTimeMillis())
+                        if (isChuyenPickLockedActive) {
+                            val remainingText = getRemainingTimeText(chuyenPickLockedUntil, isChuyenPickLockedActive)
+                            ChuyenPickLockedScreen(
+                                remainingText = remainingText,
+                                reports = chuyenPickLockedReports,
+                                context = context
+                            )
+                        } else {
+                            ChuyenPickView(
+                                db = db,
+                                currentUserEmail = currentUserEmail,
+                                currentUserName = currentUserName,
+                                currentRiderCode = currentRiderCode,
+                                currentRiderRealName = currentRiderRealName,
+                                currentUserRole = currentUserRole,
+                                webAppUrl = webAppUrl,
+                                sharedPreferences = sharedPreferences,
+                                coroutineScope = coroutineScope,
+                                context = context
+                            )
+                        }
                     } else if (activeTab == 2 && currentUserRole == "Admin") {
                         AdminDashboardView(
                             db = db,
@@ -3148,6 +3191,400 @@ fun ChuyenPickView(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("CHUYỂN", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fun getRemainingTimeText(untilDate: Date?, isLocked: Boolean): String {
+    if (!isLocked) return "0s"
+    if (untilDate == null) return "Vĩnh viễn"
+    val diff = untilDate.time - System.currentTimeMillis()
+    if (diff <= 0) return "Hết hạn (đang cập nhật)"
+    
+    val hours = diff / (3600 * 1000)
+    val minutes = (diff % (3600 * 1000)) / (60 * 1000)
+    val seconds = (diff % (60 * 1000)) / 1000
+    
+    return when {
+        hours > 24 -> "${hours / 24} ngày ${hours % 24} giờ"
+        hours > 0 -> "$hours giờ $minutes phút"
+        minutes > 0 -> "$minutes phút $seconds giây"
+        else -> "$seconds giây"
+    }
+}
+
+@Composable
+fun PrintLockedScreen(remainingText: String) {
+    val isDark = LocalThemeIsDark.current
+    val infiniteTransition = rememberInfiniteTransition(label = "airplaneLock")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "flightProgress"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(getThemeBgBrush(isDark))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                "ĐÃ BỊ KHÓA QUET & IN",
+                fontWeight = FontWeight.Black,
+                fontSize = 22.sp,
+                color = ThemePrimary,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(getThemeSurfaceColor(isDark).copy(alpha = 0.2f))
+                    .border(1.dp, getGlassBorderColor(isDark), RoundedCornerShape(16.dp))
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    
+                    // 1. Robot 1 (Left)
+                    drawRoundRect(
+                        color = Color(0xFF80DEEA),
+                        topLeft = Offset(40.dp.toPx(), h - 90.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(40.dp.toPx(), 50.dp.toPx()),
+                        cornerRadius = CornerRadius(8.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFF00ACC1),
+                        radius = 12.dp.toPx(),
+                        center = Offset(60.dp.toPx(), h - 100.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 3.dp.toPx(),
+                        center = Offset(60.dp.toPx(), h - 100.dp.toPx())
+                    )
+                    
+                    // 2. Printer (Right)
+                    drawRoundRect(
+                        color = Color(0xFFB0BEC5),
+                        topLeft = Offset(w - 80.dp.toPx(), h - 70.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(50.dp.toPx(), 35.dp.toPx()),
+                        cornerRadius = CornerRadius(4.dp.toPx())
+                    )
+                    drawRect(
+                        color = Color.White,
+                        topLeft = Offset(w - 70.dp.toPx(), h - 85.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 20.dp.toPx())
+                    )
+
+                    // 3. Robot 2 with Gun (Bottom Right)
+                    drawRoundRect(
+                        color = Color(0xFFFF8A80),
+                        topLeft = Offset(w - 140.dp.toPx(), h - 80.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(35.dp.toPx(), 40.dp.toPx()),
+                        cornerRadius = CornerRadius(6.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFFD32F2F),
+                        radius = 10.dp.toPx(),
+                        center = Offset(w - 122.dp.toPx(), h - 90.dp.toPx())
+                    )
+                    drawLine(
+                        color = Color.Black,
+                        start = Offset(w - 135.dp.toPx(), h - 80.dp.toPx()),
+                        end = Offset(w - 155.dp.toPx(), h - 95.dp.toPx()),
+                        strokeWidth = 4.dp.toPx()
+                    )
+
+                    // 4. Paper Airplane flight & shooting logic
+                    val flightStartX = 80.dp.toPx()
+                    val flightEndX = w - 80.dp.toPx()
+                    val flightY = h - 110.dp.toPx()
+                    
+                    val isLaserFired = progress in 0.45f..0.60f
+                    val isBurnt = progress >= 0.50f
+                    
+                    if (isLaserFired) {
+                        val targetX = flightStartX + (flightEndX - flightStartX) * 0.5f
+                        val targetY = flightY - 20.dp.toPx()
+                        drawLine(
+                            color = Color(0xFFFF1744),
+                            start = Offset(w - 155.dp.toPx(), h - 95.dp.toPx()),
+                            end = Offset(targetX, targetY),
+                            strokeWidth = 3.dp.toPx()
+                        )
+                    }
+
+                    if (!isBurnt) {
+                        val currentX = flightStartX + (flightEndX - flightStartX) * progress
+                        val airplanePath = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(currentX, flightY - 10.dp.toPx())
+                            lineTo(currentX + 15.dp.toPx(), flightY - 15.dp.toPx())
+                            lineTo(currentX - 5.dp.toPx(), flightY - 25.dp.toPx())
+                            close()
+                        }
+                        drawPath(airplanePath, color = Color.White)
+                    } else {
+                        val explosionProgress = (progress - 0.5f) / 0.5f
+                        if (explosionProgress < 0.8f) {
+                            val hitX = flightStartX + (flightEndX - flightStartX) * 0.5f
+                            val fallY = (flightY - 20.dp.toPx()) + 80.dp.toPx() * explosionProgress
+                            drawCircle(
+                                color = Color(0xFFFF9100),
+                                radius = (15.dp.toPx() * (1f - explosionProgress)),
+                                center = Offset(hitX + (20.dp.toPx() * explosionProgress), fallY)
+                            )
+                            drawCircle(
+                                color = Color(0xFFFF3D00),
+                                radius = (8.dp.toPx() * (1f - explosionProgress)),
+                                center = Offset(hitX + (20.dp.toPx() * explosionProgress), fallY)
+                            )
+                        }
+                    }
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                "Bạn đã bị khóa Quét & In vui lòng liên hệ quản lý để mở khóa",
+                color = getTextColor(isDark),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                "Thời gian còn lại: $remainingText",
+                color = ThemeAccent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+fun ChuyenPickLockedScreen(
+    remainingText: String,
+    reports: List<Map<String, Any>>,
+    context: android.content.Context
+) {
+    val isDark = LocalThemeIsDark.current
+    val infiniteTransition = rememberInfiniteTransition(label = "hitRobot")
+    val animationProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "throwTimeline"
+    )
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(getThemeBgBrush(isDark))
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text(
+                "ĐÃ BỊ KHÓA CHUYỂN PICK",
+                fontWeight = FontWeight.Black,
+                fontSize = 20.sp,
+                color = ThemePrimary,
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(getThemeSurfaceColor(isDark).copy(alpha = 0.2f))
+                    .border(1.dp, getGlassBorderColor(isDark), RoundedCornerShape(16.dp))
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    
+                    val packageProgress = (animationProgress / 0.4f).coerceIn(0f, 1f)
+                    val isHit = animationProgress >= 0.4f
+                    val fallProgress = ((animationProgress - 0.4f) / 0.3f).coerceIn(0f, 1f)
+                    
+                    // Robot 2 (Top Right)
+                    drawRoundRect(
+                        color = Color(0xFFFFB74D),
+                        topLeft = Offset(w - 70.dp.toPx(), 40.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 35.dp.toPx()),
+                        cornerRadius = CornerRadius(4.dp.toPx())
+                    )
+                    drawCircle(
+                        color = Color(0xFFE65100),
+                        radius = 8.dp.toPx(),
+                        center = Offset(w - 55.dp.toPx(), 30.dp.toPx())
+                    )
+
+                    // Robot 1 (Bottom Left)
+                    val r1BaseX = 60.dp.toPx()
+                    val r1BaseY = h - 65.dp.toPx()
+                    
+                    val (r1X, r1Y, rotationAngle) = if (isHit) {
+                        val yOffset = 25.dp.toPx() * fallProgress
+                        Triple(r1BaseX + 15.dp.toPx() * fallProgress, r1BaseY + yOffset, 45f * fallProgress)
+                    } else {
+                        Triple(r1BaseX, r1BaseY, 0f)
+                    }
+
+                    if (isHit && fallProgress > 0.2f) {
+                        val starAngle = (animationProgress * 360f) * (Math.PI / 180f)
+                        val starRadius = 15.dp.toPx()
+                        val starX = r1X + 15.dp.toPx() + starRadius * Math.cos(starAngle).toFloat()
+                        val starY = r1Y - 15.dp.toPx() + starRadius * Math.sin(starAngle).toFloat()
+                        drawCircle(
+                            color = Color.Yellow,
+                            radius = 4.dp.toPx(),
+                            center = Offset(starX, starY)
+                        )
+                    }
+
+                    drawCircle(
+                        color = Color(0xFF81C784),
+                        radius = 10.dp.toPx(),
+                        center = Offset(r1X + 15.dp.toPx(), r1Y - 10.dp.toPx())
+                    )
+                    drawRoundRect(
+                        color = Color(0xFF4CAF50),
+                        topLeft = Offset(r1X, r1Y),
+                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 35.dp.toPx()),
+                        cornerRadius = CornerRadius(4.dp.toPx())
+                    )
+
+                    // Flying package
+                    if (!isHit) {
+                        val startX = w - 80.dp.toPx()
+                        val startY = 50.dp.toPx()
+                        val endX = r1BaseX + 15.dp.toPx()
+                        val endY = r1BaseY - 15.dp.toPx()
+                        
+                        val currentX = startX + (endX - startX) * packageProgress
+                        val currentY = startY + (endY - startY) * packageProgress - (30.dp.toPx() * Math.sin(packageProgress * Math.PI).toFloat())
+                        
+                        drawRoundRect(
+                            color = Color(0xFF8D6E63),
+                            topLeft = Offset(currentX, currentY),
+                            size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 14.dp.toPx()),
+                            cornerRadius = CornerRadius(2.dp.toPx())
+                        )
+                    } else {
+                        val bounceProgress = ((animationProgress - 0.4f) / 0.4f).coerceIn(0f, 1f)
+                        if (bounceProgress < 1f) {
+                            val startX = r1BaseX + 15.dp.toPx()
+                            val startY = r1BaseY - 15.dp.toPx()
+                            val currentX = startX + 40.dp.toPx() * bounceProgress
+                            val currentY = startY + (10.dp.toPx() * bounceProgress) - (20.dp.toPx() * Math.sin(bounceProgress * Math.PI).toFloat())
+                            drawRoundRect(
+                                color = Color(0xFF8D6E63),
+                                topLeft = Offset(currentX, currentY),
+                                size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 14.dp.toPx()),
+                                cornerRadius = CornerRadius(2.dp.toPx())
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                "Bạn đã bị khóa Chuyển Pick vui lòng liên hệ quản lý để mở khóa",
+                color = getTextColor(isDark),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+        }
+
+        item {
+            Text(
+                "Thời gian còn lại: $remainingText",
+                color = ThemeAccent,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        if (reports.isNotEmpty()) {
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    "Danh sách tố cáo lỗi đẩy sai:",
+                    fontWeight = FontWeight.Bold,
+                    color = getTextColor(isDark),
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Start
+                )
+            }
+            
+            items(reports) { r ->
+                val reporter = r["reporterName"]?.toString() ?: "Ẩn danh"
+                val pup = r["pupCode"]?.toString() ?: "N/A"
+                val time = r["timestamp"]?.toString() ?: ""
+                val details = "$reporter tố cáo PUP: $pup ($time)"
+                
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.2f)),
+                    border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(details, color = getTextColor(isDark), fontSize = 13.sp)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "SAO CHÉP",
+                            color = ThemePrimary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            modifier = Modifier
+                                .clickable {
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Report Details", details)
+                                    clipboard.setPrimaryClip(clip)
+                                    Toast.makeText(context, "Đã sao chép thông tin!", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(4.dp)
+                        )
                     }
                 }
             }
