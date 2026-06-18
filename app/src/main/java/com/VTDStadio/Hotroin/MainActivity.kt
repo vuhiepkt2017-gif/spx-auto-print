@@ -61,9 +61,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -2642,40 +2645,451 @@ fun AndroidMascotHead() {
 
 @Composable
 fun TopBarLogo(isDark: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    val textMeasurer = rememberTextMeasurer()
+    var stateTime by remember { mutableStateOf(0f) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(16) // ~60fps
+            stateTime = (stateTime + 0.016f) % 24f // Loop animation every 24s
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
     ) {
-        // Mascot with "HỖ" speech bubble / badge above it
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            // Speech bubble/badge "HỖ"
-            Box(
-                modifier = Modifier
-                    .background(
-                        brush = Brush.horizontalGradient(listOf(Color(0xFF00C853), Color(0xFF00E676))),
-                        shape = RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp, bottomStart = 6.dp, bottomEnd = 0.dp)
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            
+            // Standard colors
+            val mainGreen = if (isDark) Color(0xFF00E676) else Color(0xFF00C853)
+            val shadowGreen = if (isDark) Color(0xFF003311) else Color(0xFF004D40)
+            val cyanColor = Color(0xFF00E5FF)
+            val redColor = Color(0xFFFF1744)
+
+            // Helper to draw futuristic letter/text
+            val drawFuturisticText = { text: String, tx: Float, ty: Float, opacity: Float, wireType: Int ->
+                if (opacity > 0f) {
+                    val baseStyle = TextStyle(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp,
+                        color = mainGreen.copy(alpha = opacity)
                     )
-                    .padding(horizontal = 6.dp, vertical = 2.dp)
-            ) {
-                Text(
-                    text = "HỖ",
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.ExtraBold
+                    val shadowStyle = TextStyle(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 17.sp,
+                        color = shadowGreen.copy(alpha = opacity)
+                    )
+                    val textLayout = textMeasurer.measure(text, baseStyle)
+                    val lw = textLayout.size.width.toFloat()
+                    val lh = textLayout.size.height.toFloat()
+
+                    // Draw futuristic wires
+                    if (wireType == 1) { // TRỢ: wire down to base
+                        drawLine(
+                            color = cyanColor.copy(alpha = opacity * 0.6f),
+                            start = Offset(tx + lw / 2, ty + lh),
+                            end = Offset(tx + lw / 2, h - 5f),
+                            strokeWidth = 2f
+                        )
+                        drawCircle(color = cyanColor.copy(alpha = opacity), radius = 3f, center = Offset(tx + lw / 2, h - 5f))
+                    } else if (wireType == 2) { // VẬN: wire up to top
+                        drawLine(
+                            color = cyanColor.copy(alpha = opacity * 0.6f),
+                            start = Offset(tx + lw / 2, ty),
+                            end = Offset(tx + lw / 2, 5f),
+                            strokeWidth = 2f
+                        )
+                        drawLine(
+                            color = cyanColor.copy(alpha = opacity * 0.6f),
+                            start = Offset(tx + lw / 2, 5f),
+                            end = Offset(tx + lw / 2 + 12f, 5f),
+                            strokeWidth = 2f
+                        )
+                        drawCircle(color = cyanColor.copy(alpha = opacity), radius = 3f, center = Offset(tx + lw / 2 + 12f, 5f))
+                    } else if (wireType == 3) { // HÀNH: 2 wires right
+                        drawLine(
+                            color = Color.Yellow.copy(alpha = opacity * 0.6f),
+                            start = Offset(tx + lw, ty + lh * 0.3f),
+                            end = Offset(tx + lw + 14f, ty + lh * 0.3f),
+                            strokeWidth = 1.5f
+                        )
+                        drawLine(
+                            color = Color.Yellow.copy(alpha = opacity * 0.6f),
+                            start = Offset(tx + lw, ty + lh * 0.7f),
+                            end = Offset(tx + lw + 14f, ty + lh * 0.7f),
+                            strokeWidth = 1.5f
+                        )
+                        drawCircle(color = Color.Yellow.copy(alpha = opacity), radius = 2f, center = Offset(tx + lw + 14f, ty + lh * 0.3f))
+                        drawCircle(color = Color.Yellow.copy(alpha = opacity), radius = 2f, center = Offset(tx + lw + 14f, ty + lh * 0.7f))
+                    }
+
+                    // 3D Shadow
+                    drawText(textMeasurer, text, Offset(tx + 2f, ty + 2f), shadowStyle)
+                    // Main Text
+                    drawText(textMeasurer, text, Offset(tx, ty), baseStyle)
+
+                    // Micro-circuit line across letters
+                    drawLine(
+                        color = Color.White.copy(alpha = opacity * 0.4f),
+                        start = Offset(tx + 2f, ty + lh / 2),
+                        end = Offset(tx + lw - 2f, ty + lh / 2),
+                        strokeWidth = 1f
+                    )
+                }
+            }
+
+            // Draw Robot 1 (Blue/Cyan, friendly)
+            val drawRobot1 = { rx: Float, ry: Float, isFlat: Boolean ->
+                if (isFlat) {
+                    // Knocked out state: draw robot lying down rotated
+                    drawRoundRect(
+                        color = cyanColor.copy(alpha = 0.5f),
+                        topLeft = Offset(rx - 8.dp.toPx(), ry + 4.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(20.dp.toPx(), 8.dp.toPx()),
+                        cornerRadius = CornerRadius(2.dp.toPx())
+                    )
+                    drawCircle(color = Color.Gray, radius = 4.dp.toPx(), center = Offset(rx + 12.dp.toPx(), ry + 4.dp.toPx()))
+                    // Draw 3 rotating stars above head
+                    val angle1 = (stateTime * 5f)
+                    val starDistance = 8.dp.toPx()
+                    for (i in 0..2) {
+                        val sa = angle1 + (i * 120f) * (Math.PI / 180f)
+                        val sx = rx + starDistance * java.lang.Math.cos(sa).toFloat()
+                        val sy = ry - 10.dp.toPx() + (3.dp.toPx()) * java.lang.Math.sin(sa).toFloat()
+                        drawCircle(color = Color.Yellow, radius = 2.dp.toPx(), center = Offset(sx, sy))
+                    }
+                } else {
+                    // Robot body
+                    drawRoundRect(
+                        color = cyanColor,
+                        topLeft = Offset(rx - 6.dp.toPx(), ry - 8.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 14.dp.toPx()),
+                        cornerRadius = CornerRadius(3.dp.toPx())
+                    )
+                    // Visor
+                    drawRect(color = Color.Black, topLeft = Offset(rx - 4.dp.toPx(), ry - 6.dp.toPx()), size = androidx.compose.ui.geometry.Size(8.dp.toPx(), 4.dp.toPx()))
+                    drawRect(color = Color(0xFF00E5FF), topLeft = Offset(rx - 3.dp.toPx(), ry - 5.dp.toPx()), size = androidx.compose.ui.geometry.Size(6.dp.toPx(), 2.dp.toPx()))
+                    // Wheels
+                    drawCircle(color = Color.DarkGray, radius = 3.dp.toPx(), center = Offset(rx - 4.dp.toPx(), ry + 7.dp.toPx()))
+                    drawCircle(color = Color.DarkGray, radius = 3.dp.toPx(), center = Offset(rx + 4.dp.toPx(), ry + 7.dp.toPx()))
+                    // Antenna
+                    drawLine(color = cyanColor, start = Offset(rx, ry - 8.dp.toPx()), end = Offset(rx, ry - 13.dp.toPx()), strokeWidth = 2f)
+                    drawCircle(color = cyanColor, radius = 2f, center = Offset(rx, ry - 13.dp.toPx()))
+                }
+            }
+
+            // Draw Robot 2 (Red, aggressive, hammer robot)
+            val drawRobot2 = { rx: Float, ry: Float, hammerProg: Float ->
+                // Robot body
+                drawRoundRect(
+                    color = redColor,
+                    topLeft = Offset(rx - 7.dp.toPx(), ry - 9.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 15.dp.toPx()),
+                    cornerRadius = CornerRadius(4.dp.toPx())
+                )
+                // Visor
+                drawRect(color = Color.Black, topLeft = Offset(rx - 5.dp.toPx(), ry - 7.dp.toPx()), size = androidx.compose.ui.geometry.Size(10.dp.toPx(), 4.dp.toPx()))
+                drawRect(color = Color.White, topLeft = Offset(rx - 4.dp.toPx(), ry - 6.dp.toPx()), size = androidx.compose.ui.geometry.Size(8.dp.toPx(), 2.dp.toPx()))
+                // Tread / Base
+                drawRoundRect(color = Color.DarkGray, topLeft = Offset(rx - 8.dp.toPx(), ry + 6.dp.toPx()), size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 4.dp.toPx()), cornerRadius = CornerRadius(1.dp.toPx()))
+                
+                // Draw Hammer with rotation based on strike progress
+                // hammerProg is from 0.0 to 1.0 (swings hammer down)
+                val swingAngle = -45f + (135f * hammerProg) // swings from -45 to 90 degrees
+                val angleRad = swingAngle * (Math.PI / 180f)
+                val handleLen = 15.dp.toPx()
+                val startX = rx - 5.dp.toPx()
+                val startY = ry - 2.dp.toPx()
+                val endX = startX + handleLen * java.lang.Math.cos(angleRad).toFloat()
+                val endY = startY - handleLen * java.lang.Math.sin(angleRad).toFloat()
+                
+                // Handle
+                drawLine(color = Color.Gray, start = Offset(startX, startY), end = Offset(endX, endY), strokeWidth = 3f)
+                // Head
+                drawRoundRect(
+                    color = Color.LightGray,
+                    topLeft = Offset(endX - 5.dp.toPx(), endY - 3.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size(10.dp.toPx(), 6.dp.toPx()),
+                    cornerRadius = CornerRadius(1.dp.toPx())
                 )
             }
-            Spacer(modifier = Modifier.height(2.dp))
-            // Android Head Mascot
-            AndroidMascotHead()
+
+            // --- ANIMATION TIMELINE CALCULATIONS ---
+            // Width reference coordinates:
+            // "HỖ": 20, "TRỢ": 60, "VẬN": 100, "HÀNH": 140
+            val yBase = h / 2 - 8.dp.toPx()
+
+            if (stateTime in 0.0f..5.0f) {
+                // Phase 1: Robot 1 carrying "HỖ" runs back and forth in front of TRỢ (Avoids overlay)
+                // Laps: total duration 5s. Let's make 3 laps.
+                val cycle = java.lang.Math.sin((stateTime / 5.0f) * 3.0f * Math.PI * 2.0f).toFloat()
+                val r1X = w * 0.35f + (w * 0.15f * cycle)
+                val r1Y = yBase + 12.dp.toPx()
+                
+                drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
+                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+
+                // Carrying "HỖ" on head
+                drawFuturisticText("HỖ", r1X - 8.dp.toPx(), r1Y - 25.dp.toPx(), 1.0f, 0)
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 5.0f..6.0f) {
+                // Phase 2: Robot 1 stops and throws "HỖ" up to disappear
+                val t = stateTime - 5.0f
+                val r1X = w * 0.35f
+                val r1Y = yBase + 12.dp.toPx()
+                
+                drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
+                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+
+                // "HỖ" flying up & fading
+                val flyY = (r1Y - 25.dp.toPx()) - (t * 80.dp.toPx())
+                drawFuturisticText("HỖ", r1X - 8.dp.toPx(), flyY, 1.0f - t, 0)
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 6.0f..7.5f) {
+                // Phase 3: Robot 1 walks to "TRỢ" and kicks it to the right off-screen
+                val t = stateTime - 6.0f
+                val startR1X = w * 0.35f
+                val endR1X = w * 0.28f
+                val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
+                val r1Y = yBase + 12.dp.toPx()
+
+                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+
+                // "TRỢ" flies off if kick has happened (let's say kick at t > 0.8s)
+                if (t < 0.8f) {
+                    drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
+                } else {
+                    val kickProgress = (t - 0.8f) / 0.7f
+                    val troX = w * 0.32f + kickProgress * w * 0.8f
+                    val troY = yBase - (java.lang.Math.sin(kickProgress * Math.PI).toFloat() * 15.dp.toPx())
+                    drawFuturisticText("TRỢ", troX, troY, 1.0f - kickProgress, 1)
+                }
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 7.5f..9.0f) {
+                // Phase 4: Robot 1 jumps on top of "VẬN" breaking and sinking it
+                val t = stateTime - 7.5f
+                val startR1X = w * 0.28f
+                val endR1X = w * 0.52f
+                val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
+                
+                // Jump arc
+                val jumpProgress = (t / 1.5f).coerceIn(0f, 1f)
+                val r1Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(jumpProgress * Math.PI).toFloat() * 20.dp.toPx())
+
+                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+
+                // VẬN behavior: breaks and sinks on land (land happens at jumpProgress > 0.8s)
+                if (jumpProgress < 0.8f) {
+                    drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
+                } else {
+                    val sinkProgress = (jumpProgress - 0.8f) / 0.2f
+                    val vanY = yBase + sinkProgress * 40.dp.toPx()
+                    // Draw VẬN broken/split
+                    drawFuturisticText("VẬ", w * 0.48f - 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
+                    drawFuturisticText("N", w * 0.53f + 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
+                }
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 9.0f..10.5f) {
+                // Phase 5: Robot 1 walks to drag "HÀNH" to the left (approx w * 0.32f)
+                val t = stateTime - 9.0f
+                val walkProgress = (t / 1.5f).coerceIn(0f, 1f)
+                
+                // Robot runs right, grabs HÀNH, drags it left
+                val r1X = if (walkProgress < 0.4f) {
+                    w * 0.52f + (w * 0.18f * (walkProgress / 0.4f))
+                } else {
+                    w * 0.70f - (w * 0.38f * ((walkProgress - 0.4f) / 0.6f))
+                }
+                val r1Y = yBase + 12.dp.toPx()
+
+                // "HÀNH" position
+                val hanhX = if (walkProgress < 0.4f) {
+                    w * 0.64f
+                } else {
+                    w * 0.64f - (w * 0.32f * ((walkProgress - 0.4f) / 0.6f))
+                }
+                drawFuturisticText("HÀNH", hanhX, yBase, 1.0f, 3)
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 10.5f..12.5f) {
+                // Phase 6: Robot 1 jumps up and pulls down "LÀ" from the sky to w * 0.48f
+                val t = stateTime - 10.5f
+                val jumpProgress = (t / 2.0f).coerceIn(0f, 1f)
+                val r1X = w * 0.32f + (w * 0.16f * jumpProgress)
+                
+                // jump and pull arc
+                val r1Y = if (jumpProgress < 0.5f) {
+                    (yBase + 12.dp.toPx()) - (java.lang.Math.sin((jumpProgress / 0.5f) * Math.PI).toFloat() * 18.dp.toPx())
+                } else {
+                    yBase + 12.dp.toPx()
+                }
+
+                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+
+                // "LÀ" drops from top at jumpProgress > 0.5
+                if (jumpProgress > 0.5f) {
+                    val dropProgress = (jumpProgress - 0.5f) / 0.5f
+                    val laY = -15.dp.toPx() + (yBase + 15.dp.toPx()) * dropProgress
+                    drawFuturisticText("LÀ", w * 0.48f, laY, 1.0f, 0)
+                }
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 12.5f..14.5f) {
+                // Phase 7: Robot 1 walks right to pull/drag "CHÍNH" in from off-screen right
+                val t = stateTime - 12.5f
+                val walkProgress = (t / 2.0f).coerceIn(0f, 1f)
+
+                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
+
+                val r1X = if (walkProgress < 0.5f) {
+                    w * 0.48f + (w * 0.35f * (walkProgress / 0.5f))
+                } else {
+                    w * 0.83f - (w * 0.19f * ((walkProgress - 0.5f) / 0.5f))
+                }
+                val r1Y = yBase + 12.dp.toPx()
+
+                // "CHÍNH" dragged from w * 1.0f to w * 0.64f
+                val chinX = if (walkProgress < 0.5f) {
+                    w * 1.0f
+                } else {
+                    w * 1.0f - (w * 0.36f * ((walkProgress - 0.5f) / 0.5f))
+                }
+                drawFuturisticText("CHÍNH", chinX, yBase, 1.0f, 0)
+                drawRobot1(r1X, r1Y, false)
+
+            } else if (stateTime in 14.5f..16.0f) {
+                // Phase 8: Robot 2 enters carrying hammer, hits Robot 1, Robot 1 knocked out
+                val t = stateTime - 14.5f
+                val enterProgress = (t / 1.5f).coerceIn(0f, 1f)
+
+                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
+                drawFuturisticText("CHÍNH", w * 0.64f, yBase, 1.0f, 0)
+
+                // Robot 2 walks in from right (w * 1.0f) to w * 0.75f
+                val r2X = w * 1.0f - (w * 0.25f * enterProgress)
+                val r2Y = yBase + 12.dp.toPx()
+
+                // Swing hammer at end of phase
+                val hammerProgress = if (enterProgress > 0.7f) {
+                    (enterProgress - 0.7f) / 0.3f
+                } else {
+                    0f
+                }
+
+                // Robot 1 is knocked out when hit
+                val isR1KnockedOut = enterProgress > 0.85f
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), isR1KnockedOut)
+                drawRobot2(r2X, r2Y, hammerProgress)
+
+            } else if (stateTime in 16.0f..17.5f) {
+                // Phase 9: Robot 2 kicks "CHÍNH" off-screen to the right
+                val t = stateTime - 16.0f
+                val progress = (t / 1.5f).coerceIn(0f, 1f)
+
+                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
+
+                // Robot 2 kicks CHÍNH
+                val r2X = w * 0.75f - (w * 0.08f * progress)
+                val r2Y = yBase + 12.dp.toPx()
+
+                // CHÍNH flies right and disappears
+                val chinX = w * 0.64f + progress * w * 0.6f
+                val chinY = yBase - (java.lang.Math.sin(progress * Math.PI).toFloat() * 12.dp.toPx())
+                drawFuturisticText("CHÍNH", chinX, chinY, 1.0f - progress, 0)
+
+                // Robot 1 is knocked out on floor
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot2(r2X, r2Y, 0f)
+
+            } else if (stateTime in 17.5f..19.0f) {
+                // Phase 10: Robot 2 kicks "LÀ" upwards off-screen
+                val t = stateTime - 17.5f
+                val progress = (t / 1.5f).coerceIn(0f, 1f)
+
+                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+
+                // Robot 2 moves to kick "LÀ"
+                val r2X = w * 0.67f - (w * 0.15f * progress)
+                val r2Y = yBase + 12.dp.toPx()
+
+                // "LÀ" flies up
+                val laY = yBase - progress * 80.dp.toPx()
+                drawFuturisticText("LÀ", w * 0.48f, laY, 1.0f - progress, 0)
+
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot2(r2X, r2Y, 0f)
+
+            } else if (stateTime in 19.0f..20.0f) {
+                // Phase 11: Robot 2 jumps on top of "HÀNH" sinking it
+                val t = stateTime - 19.0f
+                val progress = (t / 1.0f).coerceIn(0f, 1f)
+
+                // Jump arc of Robot 2
+                val r2X = w * 0.52f - (w * 0.16f * progress)
+                val r2Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(progress * Math.PI).toFloat() * 16.dp.toPx())
+
+                // "HÀNH" sinks when Robot 2 lands (progress > 0.8)
+                if (progress < 0.8f) {
+                    drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                } else {
+                    val sinkProgress = (progress - 0.8f) / 0.2f
+                    drawFuturisticText("HÀNH", w * 0.32f, yBase + sinkProgress * 40.dp.toPx(), 1.0f - sinkProgress, 0)
+                }
+
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot2(r2X, r2Y, 0f)
+
+            } else if (stateTime in 20.0f..21.5f) {
+                // Phase 12: Robot 2 jumps to collapse/pull down everything
+                val t = stateTime - 20.0f
+                val progress = (t / 1.5f).coerceIn(0f, 1f)
+
+                // Sinks the whole view frame / floor
+                val r2X = w * 0.36f
+                val r2Y = (yBase + 12.dp.toPx()) + progress * 50.dp.toPx()
+
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx() + progress * 50.dp.toPx(), true)
+                drawRobot2(r2X, r2Y, 0f)
+
+            } else if (stateTime in 21.5f..22.5f) {
+                // Phase 13: Robot 2 walks off-screen to the left
+                val t = stateTime - 21.5f
+                val progress = (t / 1.0f).coerceIn(0f, 1f)
+
+                val r2X = w * 0.36f - progress * w * 0.5f
+                val r2Y = yBase + 12.dp.toPx()
+
+                // Robot 1 is still flat on floor
+                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot2(r2X, r2Y, 0f)
+
+            } else if (stateTime in 22.5f..24.0f) {
+                // Phase 14: Robot 1 wakes up, runs left to grab HỖ and reset
+                val t = stateTime - 22.5f
+                val progress = (t / 1.5f).coerceIn(0f, 1f)
+
+                val r1X = w * 0.64f - progress * w * 0.64f
+                val r1Y = yBase + 12.dp.toPx()
+
+                drawRobot1(r1X, r1Y, false)
+            }
         }
-        
-        // TRỢ, VẬN, HÀNH badges
-        BadgeItem(text = "TRỢ", isDark = isDark)
-        BadgeItem(text = "VẬN", isDark = isDark)
-        BadgeItem(text = "HÀNH", isDark = isDark)
     }
 }
 
