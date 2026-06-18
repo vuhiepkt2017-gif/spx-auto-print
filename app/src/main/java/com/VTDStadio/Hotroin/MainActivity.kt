@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.nativeCanvas
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
@@ -2676,34 +2678,26 @@ fun TopBarLogo(isDark: Boolean) {
             // Helper to draw futuristic letter/text with glowing neon, chip structure, and 3D layers
             val drawFuturisticText = { text: String, tx: Float, ty: Float, opacity: Float, wireType: Int ->
                 if (opacity > 0f) {
-                    val baseStyle = TextStyle(
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp, // Decreased font size as requested
-                        color = fontBlue.copy(alpha = opacity)
-                    )
+                    val paint = android.graphics.Paint().apply {
+                        color = fontBlue.copy(alpha = opacity).toArgb()
+                        textSize = 12.dp.toPx()
+                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                        isAntiAlias = true
+                    }
                     
-                    val textLayout = textMeasurer.measure(
-                        text = text,
-                        style = baseStyle,
-                        constraints = androidx.compose.ui.unit.Constraints(
-                            minWidth = 0,
-                            maxWidth = w.toInt().coerceAtLeast(100),
-                            minHeight = 0,
-                            maxHeight = h.toInt().coerceAtLeast(50)
-                        )
-                    )
-                    val lw = textLayout.size.width.toFloat()
-                    val lh = textLayout.size.height.toFloat()
+                    val bounds = android.graphics.Rect()
+                    paint.getTextBounds(text, 0, text.length, bounds)
+                    val lw = bounds.width().toFloat()
+                    val lh = bounds.height().toFloat()
 
                     // Safe box padding
                     val boxW = lw + 12.dp.toPx()
                     val boxH = lh + 8.dp.toPx()
                     val bx = tx - 6.dp.toPx()
-                    val by = ty - 4.dp.toPx()
+                    val by = ty - lh - 4.dp.toPx() // Adjusted to use height bounds properly
 
                     // Draw Futuristic Wires (Capsule Wires from Image)
                     if (wireType == 1) { // TRỢ: wire down to base
-                        // Stick support wire below (turquoise/teal angle line)
                         drawLine(
                             color = Color(0xFF00B0FF).copy(alpha = opacity),
                             start = Offset(bx + boxW / 2, by + boxH),
@@ -2716,7 +2710,6 @@ fun TopBarLogo(isDark: Boolean) {
                             end = Offset(bx + boxW / 2 + 4.dp.toPx(), by + boxH + 16.dp.toPx()),
                             strokeWidth = 2.dp.toPx()
                         )
-                        // Floor line below wire
                         drawLine(
                             color = Color.Gray.copy(alpha = opacity),
                             start = Offset(bx + boxW / 2 - 15.dp.toPx(), by + boxH + 16.dp.toPx()),
@@ -2724,13 +2717,11 @@ fun TopBarLogo(isDark: Boolean) {
                             strokeWidth = 2.dp.toPx()
                         )
                     } else if (wireType == 2) { // VẬN: wire up to top
-                        // Oval connector plate on top
                         drawOval(
                             color = fontBlue.copy(alpha = opacity),
                             topLeft = Offset(bx + boxW / 2 - 10.dp.toPx(), by - 12.dp.toPx()),
                             size = androidx.compose.ui.geometry.Size(20.dp.toPx(), 4.dp.toPx())
                         )
-                        // Tiny hook lines connecting box to oval
                         drawLine(
                             color = Color.Gray.copy(alpha = opacity),
                             start = Offset(bx + boxW / 2 - 4.dp.toPx(), by),
@@ -2744,7 +2735,6 @@ fun TopBarLogo(isDark: Boolean) {
                             strokeWidth = 1.dp.toPx()
                         )
                     } else if (wireType == 3) { // HÀNH: 2 wires right
-                        // Right connector point
                         drawLine(
                             color = robotMagenta.copy(alpha = opacity),
                             start = Offset(bx + boxW, by + boxH / 2 - 2.dp.toPx()),
@@ -2757,7 +2747,6 @@ fun TopBarLogo(isDark: Boolean) {
                             end = Offset(bx + boxW + 8.dp.toPx(), by + boxH / 2 + 2.dp.toPx()),
                             strokeWidth = 2.dp.toPx()
                         )
-                        // Small mini plate on the end of wire
                         drawRect(
                             color = robotMagenta.copy(alpha = opacity),
                             topLeft = Offset(bx + boxW + 8.dp.toPx(), by + boxH / 2 - 4.dp.toPx()),
@@ -2765,7 +2754,7 @@ fun TopBarLogo(isDark: Boolean) {
                         )
                     }
 
-                    // Draw capsule container box (curved capsule layout from user screenshot)
+                    // Draw capsule container box
                     drawRoundRect(
                         color = capsuleBg.copy(alpha = opacity),
                         topLeft = Offset(bx, by),
@@ -2780,7 +2769,7 @@ fun TopBarLogo(isDark: Boolean) {
                         style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f.dp.toPx())
                     )
 
-                    // Capsule inner circuitry dashes (3 small dashes on left & right of capsule)
+                    // Capsule inner circuitry dashes
                     val dashW = 2.dp.toPx()
                     val dashH = 1.dp.toPx()
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 - 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
@@ -2791,8 +2780,13 @@ fun TopBarLogo(isDark: Boolean) {
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2 + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
 
-                    // Draw main Text centered inside box
-                    drawText(textMeasurer, text, Offset(tx, ty), baseStyle)
+                    // Draw text natively to avoid maxWidth layout engine crashes completely
+                    drawContext.canvas.nativeCanvas.drawText(
+                        text,
+                        tx,
+                        ty,
+                        paint
+                    )
                 }
             }
 
