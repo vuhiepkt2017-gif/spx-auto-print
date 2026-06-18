@@ -3754,7 +3754,7 @@ fun ChuyenPickView(
                             modifier = Modifier
                                 .fillMaxWidth(0.85f)
                                 .heightIn(max = 300.dp)
-                                .background(if (isDark) Color(0xFFE2E6F2) else Color(0xFF2E3147))
+                                .background(if (isDark) Color(0xFFCCCCCC) else Color(0xFFE2E4EB)) // Dark mode: light grey (0xFFCCCCCC), Light mode: light-medium grey (0xFFE2E4EB)
                         ) {
                             OutlinedTextField(
                                 value = searchDriverQuery,
@@ -3762,13 +3762,15 @@ fun ChuyenPickView(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(8.dp),
-                                placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                placeholder = { Text("Tìm kiếm Rider...", color = Color.Black.copy(alpha = 0.5f)) },
                                 singleLine = true,
                                 colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = getTextColor(isDark),
-                                    unfocusedTextColor = getTextColor(isDark),
+                                    focusedTextColor = Color.Black,
+                                    unfocusedTextColor = Color.Black,
                                     focusedBorderColor = ThemePrimary,
-                                    unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f)
+                                    unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f),
+                                    unfocusedContainerColor = Color.White.copy(alpha = 0.5f),
+                                    focusedContainerColor = Color.White.copy(alpha = 0.7f)
                                 )
                             )
 
@@ -3780,7 +3782,7 @@ fun ChuyenPickView(
 
                             if (filteredDrivers.isEmpty()) {
                                 DropdownMenuItem(
-                                    text = { Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                    text = { Text("Không tìm thấy Rider nào", color = Color.Black.copy(alpha = 0.5f)) },
                                     onClick = { }
                                 )
                             } else {
@@ -3790,13 +3792,13 @@ fun ChuyenPickView(
                                     val displayText = "$name - $code"
                                     if (index > 0) {
                                         Divider(
-                                            color = getGlassBorderColor(isDark).copy(alpha = 0.4f),
+                                            color = Color.Black.copy(alpha = 0.15f),
                                             thickness = 1.dp,
                                             modifier = Modifier.padding(horizontal = 8.dp)
                                         )
                                     }
                                     DropdownMenuItem(
-                                        text = { Text(displayText, color = getTextColor(isDark)) },
+                                        text = { Text(displayText, color = Color.Black, fontWeight = FontWeight.Medium) },
                                         onClick = {
                                             selectedDriver = displayText
                                             expanded = false
@@ -4164,11 +4166,11 @@ fun ChuyenPickView(
                             DropdownMenu(
                                 expanded = supportDropdownExpanded,
                                 onDismissRequest = { supportDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFFE2E6F2) else Color(0xFF2E3147))
+                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFFCCCCCC) else Color(0xFFE2E4EB))
                             ) {
                                 if (outHubDrivers.isEmpty()) {
                                     DropdownMenuItem(
-                                        text = { Text("Chưa có Rider ngoài Hub nào", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                        text = { Text("Chưa có Rider ngoài Hub nào", color = Color.Black.copy(alpha = 0.5f)) },
                                         onClick = { supportDropdownExpanded = false }
                                     )
                                 } else {
@@ -4176,8 +4178,15 @@ fun ChuyenPickView(
                                         val n = dr["name"]?.toString() ?: ""
                                         val c = dr["code"]?.toString() ?: ""
                                         val disp = "$n - $c"
+                                        if (i > 0) {
+                                            Divider(
+                                                color = Color.Black.copy(alpha = 0.15f),
+                                                thickness = 1.dp,
+                                                modifier = Modifier.padding(horizontal = 8.dp)
+                                            )
+                                        }
                                         DropdownMenuItem(
-                                            text = { Text(disp, color = getTextColor(isDark)) },
+                                            text = { Text(disp, color = Color.Black, fontWeight = FontWeight.Medium) },
                                             onClick = {
                                                 supportTargetDriver = disp
                                                 supportDropdownExpanded = false
