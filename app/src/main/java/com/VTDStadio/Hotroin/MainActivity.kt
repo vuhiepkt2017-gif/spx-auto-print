@@ -898,7 +898,7 @@ fun ShopeeAutoPrintApp(
 
     // Safeguard: Lock Rider role out of Admin Dashboard tab
     LaunchedEffect(currentUserRole) {
-        if (currentUserRole != "Admin") {
+        if (currentUserRole != "Admin" && activeTab == 2) {
             activeTab = 0
         }
     }
@@ -1192,15 +1192,6 @@ fun ShopeeAutoPrintApp(
                                     tint = getTextColor(isDark)
                                 )
                             }
-                            if (currentUserRole != "Admin") {
-                                IconButton(onClick = handleSignOut) {
-                                    Icon(
-                                        imageVector = Icons.Default.Logout,
-                                        contentDescription = "Đăng xuất",
-                                        tint = ThemePrimary
-                                    )
-                                }
-                            }
                         },
                         colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                             containerColor = getThemeBgColor(isDark)
@@ -1245,6 +1236,19 @@ fun ShopeeAutoPrintApp(
                                     )
                                 },
                                 label = { Text("Quản trị", color = getTextColor(isDark)) }
+                            )
+                        } else {
+                            NavigationBarItem(
+                                selected = activeTab == 3,
+                                onClick = { activeTab = 3 },
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Person,
+                                        contentDescription = "Tài khoản",
+                                        tint = if (activeTab == 3) ThemePrimary else getTextColor(isDark).copy(alpha = 0.6f)
+                                    )
+                                },
+                                label = { Text("Tài khoản", color = getTextColor(isDark)) }
                             )
                         }
                     }
@@ -1549,7 +1553,68 @@ fun ShopeeAutoPrintApp(
                                     }
                             }
                         )
+                    } else if (activeTab == 3 && currentUserRole != "Admin") {
+                        UserAccountView(
+                            currentUserEmail = currentUserEmail,
+                            currentUserName = currentUserName,
+                            currentUserRole = currentUserRole,
+                            onLogout = handleSignOut
+                        )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun UserAccountView(
+    currentUserEmail: String,
+    currentUserName: String,
+    currentUserRole: String,
+    onLogout: () -> Unit
+) {
+    val isDark = LocalThemeIsDark.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Top
+    ) {
+        Spacer(modifier = Modifier.height(20.dp))
+        Card(
+            colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+            border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Thông tin tài khoản", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Text("Thông tin đăng nhập:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Email: $currentUserEmail", color = getTextColor(isDark), fontSize = 13.sp)
+                Text("Tên: $currentUserName", color = getTextColor(isDark), fontSize = 13.sp)
+                
+                val roleDisplayName = when (currentUserRole) {
+                    "Driver" -> "Tài xế (Driver)"
+                    else -> currentUserRole
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Vai trò: $roleDisplayName", color = ThemeAccent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Premium3DButton(
+                    onClick = onLogout,
+                    modifier = Modifier.fillMaxWidth(),
+                    containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
+                    shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Đăng xuất", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -1589,6 +1654,41 @@ fun AdminDashboardView(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Account information card at the very top for Admin
+        Card(
+            colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+            border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Thông tin đăng nhập:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 14.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Email: $currentUserEmail", color = getTextColor(isDark), fontSize = 12.sp)
+                        Text("Tên: $currentUserName", color = getTextColor(isDark), fontSize = 12.sp)
+                        Text("Vai trò: Quản trị viên (Admin)", color = Color(0xFFFFA000), fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                    }
+                    Premium3DButton(
+                        onClick = onLogout,
+                        modifier = Modifier.width(110.dp).height(36.dp),
+                        containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
+                        shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                    ) {
+                        Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor(), modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Đăng xuất", color = getButtonTextColor(), fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1695,32 +1795,6 @@ fun AdminDashboardView(
                     }
                 }
             } else if (selectedSubTab == 1) {
-                item {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
-                        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("Thông tin đăng nhập", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Email: $currentUserEmail", color = getTextColor(isDark))
-                            Text("Tên: $currentUserName", color = getTextColor(isDark))
-                            Text("Vai trò: Quản trị viên (Admin)", color = Color(0xFFFFA000), fontWeight = FontWeight.Medium)
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Premium3DButton(
-                                onClick = onLogout,
-                                modifier = Modifier.fillMaxWidth(),
-                                containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
-                                shadowColor = ThemePrimary.copy(alpha = 0.4f)
-                            ) {
-                                Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Đăng xuất tài khoản", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
                 item {
                     AdminCreateRiderSection(db = db)
                 }
