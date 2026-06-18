@@ -2678,7 +2678,7 @@ fun TopBarLogo(isDark: Boolean) {
                 if (opacity > 0f) {
                     val baseStyle = TextStyle(
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 11.sp, // Decreased font size as requested
                         color = fontBlue.copy(alpha = opacity)
                     )
                     
@@ -2696,10 +2696,10 @@ fun TopBarLogo(isDark: Boolean) {
                     val lh = textLayout.size.height.toFloat()
 
                     // Safe box padding
-                    val boxW = lw + 18.dp.toPx()
-                    val boxH = lh + 10.dp.toPx()
-                    val bx = tx - 9.dp.toPx()
-                    val by = ty - 5.dp.toPx()
+                    val boxW = lw + 12.dp.toPx()
+                    val boxH = lh + 8.dp.toPx()
+                    val bx = tx - 6.dp.toPx()
+                    val by = ty - 4.dp.toPx()
 
                     // Draw Futuristic Wires (Capsule Wires from Image)
                     if (wireType == 1) { // TRỢ: wire down to base
@@ -2770,26 +2770,26 @@ fun TopBarLogo(isDark: Boolean) {
                         color = capsuleBg.copy(alpha = opacity),
                         topLeft = Offset(bx, by),
                         size = androidx.compose.ui.geometry.Size(boxW, boxH),
-                        cornerRadius = CornerRadius(10.dp.toPx())
+                        cornerRadius = CornerRadius(8.dp.toPx())
                     )
                     drawRoundRect(
                         color = capsuleBorder.copy(alpha = opacity),
                         topLeft = Offset(bx, by),
                         size = androidx.compose.ui.geometry.Size(boxW, boxH),
-                        cornerRadius = CornerRadius(10.dp.toPx()),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f.dp.toPx())
+                        cornerRadius = CornerRadius(8.dp.toPx()),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f.dp.toPx())
                     )
 
                     // Capsule inner circuitry dashes (3 small dashes on left & right of capsule)
-                    val dashW = 3.dp.toPx()
+                    val dashW = 2.dp.toPx()
                     val dashH = 1.dp.toPx()
-                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 - 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 - 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
-                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 + 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
                     
-                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2 - 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
-                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
-                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2 + 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2 - 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2 + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
 
                     // Draw main Text centered inside box
                     drawText(textMeasurer, text, Offset(tx, ty), baseStyle)
@@ -2827,9 +2827,10 @@ fun TopBarLogo(isDark: Boolean) {
                     drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(rx - 3.dp.toPx(), ry - 1.dp.toPx()))
                     drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(rx + 3.dp.toPx(), ry - 1.dp.toPx()))
                     
-                    // Cute stick legs (2 grey slanted lines)
-                    drawLine(color = Color.DarkGray, start = Offset(rx - 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 6.dp.toPx(), ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
-                    drawLine(color = Color.DarkGray, start = Offset(rx + 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 2.dp.toPx(), ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                    // Walking legs animation (Alternating leg slant angles using sine wave)
+                    val legSwing = java.lang.Math.sin(stateTime.toDouble() * 15.0).toFloat() * 3.dp.toPx()
+                    drawLine(color = Color.DarkGray, start = Offset(rx - 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 4.dp.toPx() - 2.dp.toPx() + legSwing, ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                    drawLine(color = Color.DarkGray, start = Offset(rx + 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 4.dp.toPx() - 2.dp.toPx() - legSwing, ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
 
                     // Carrying arms (slanted magenta stick arms up towards HỖ box)
                     drawLine(color = Color(0xFFD81B60), start = Offset(rx - 7.dp.toPx(), ry - 2.dp.toPx()), end = Offset(rx - 11.dp.toPx(), ry - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
@@ -2846,9 +2847,10 @@ fun TopBarLogo(isDark: Boolean) {
                     size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 10.dp.toPx()),
                     cornerRadius = CornerRadius(2.dp.toPx())
                 )
-                // Cute stick legs
-                drawLine(color = Color.Black, start = Offset(rx - 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 3.dp.toPx(), ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
-                drawLine(color = Color.Black, start = Offset(rx + 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 3.dp.toPx(), ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
+                // Animated walking legs
+                val legSwing2 = java.lang.Math.sin(stateTime.toDouble() * 15.0).toFloat() * 2.dp.toPx()
+                drawLine(color = Color.Black, start = Offset(rx - 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 3.dp.toPx() + legSwing2, ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
+                drawLine(color = Color.Black, start = Offset(rx + 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 3.dp.toPx() - legSwing2, ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
 
                 // Draw hammer swing when needed
                 if (hammerProg > 0f) {
@@ -2876,10 +2878,10 @@ fun TopBarLogo(isDark: Boolean) {
             val yBase = h / 2 - 8.dp.toPx()
 
             if (stateTime in 0.0f..5.0f) {
-                // Phase 1: Robot 1 carrying "HỖ" runs back and forth in front of TRỢ (Avoids overlay)
-                // Let's keep Robot 1's X range from w * 0.42f to w * 0.60f (TRỢ is at w * 0.32f)
+                // Phase 1: Robot 1 carrying "HỖ" runs back and forth strictly on the left (w*0.05f to w*0.23f)
+                // This prevents running over or covering TRỢ, VẬN, HÀNH at all.
                 val cycle = java.lang.Math.sin((stateTime / 5.0f) * 3.0f * Math.PI * 2.0f).toFloat()
-                val r1X = w * 0.51f + (w * 0.09f * cycle)
+                val r1X = w * 0.14f + (w * 0.09f * cycle)
                 val r1Y = yBase + 12.dp.toPx()
                 
                 drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
@@ -2893,7 +2895,7 @@ fun TopBarLogo(isDark: Boolean) {
             } else if (stateTime in 5.0f..6.0f) {
                 // Phase 2: Robot 1 stops and throws "HỖ" up to disappear
                 val t = stateTime - 5.0f
-                val r1X = w * 0.51f
+                val r1X = w * 0.14f
                 val r1Y = yBase + 12.dp.toPx()
                 
                 drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
@@ -2909,8 +2911,8 @@ fun TopBarLogo(isDark: Boolean) {
             } else if (stateTime in 6.0f..7.5f) {
                 // Phase 3: Robot 1 walks to "TRỢ" and kicks it to the right off-screen
                 val t = stateTime - 6.0f
-                val startR1X = w * 0.51f
-                val endR1X = w * 0.38f // stops just right of TRỢ (w * 0.32)
+                val startR1X = w * 0.14f
+                val endR1X = w * 0.28f // stops just left/right of TRỢ (w * 0.32) to kick
                 val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
                 val r1Y = yBase + 12.dp.toPx()
 
