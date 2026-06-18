@@ -2666,60 +2666,22 @@ fun TopBarLogo(isDark: Boolean) {
             val w = size.width
             val h = size.height
             
-            // Standard colors
-            // Futuristic colors (Neon, Electric)
-            val neonGreen = Color(0xFF39FF14) // Electric/Neon green
-            val neonCyan = Color(0xFF00E5FF)  // Neon cyan
-            val neonRed = Color(0xFFFF1744)   // Red glow/Accent
-            val neonYellow = Color(0xFFFFD600)// Bright Yellow for energy
-            val darkBase = Color(0xFF0D1117)   // Chip motherboard color
-
-            // Helper to draw futuristic circuit motherboard lines in the background
-            val drawMotherboardPaths = {
-                // Horizontal motherboard bus lines
-                drawLine(
-                    color = Color.White.copy(alpha = 0.08f),
-                    start = Offset(0f, h * 0.2f),
-                    end = Offset(w, h * 0.2f),
-                    strokeWidth = 1.dp.toPx()
-                )
-                drawLine(
-                    color = Color.White.copy(alpha = 0.08f),
-                    start = Offset(0f, h * 0.8f),
-                    end = Offset(w, h * 0.8f),
-                    strokeWidth = 1.dp.toPx()
-                )
-                // Small node connectors
-                for (i in 1..8) {
-                    val cx = w * (i / 9f)
-                    drawCircle(
-                        color = neonCyan.copy(alpha = 0.15f),
-                        radius = 2.dp.toPx(),
-                        center = Offset(cx, h * 0.2f)
-                    )
-                    drawCircle(
-                        color = neonCyan.copy(alpha = 0.15f),
-                        radius = 2.dp.toPx(),
-                        center = Offset(cx, h * 0.8f)
-                    )
-                }
-            }
+            // Mockup Theme Colors
+            val capsuleBg = Color(0xFFE8EDF9)   // Light purple/blue grey capsule plate
+            val capsuleBorder = Color(0xFFC5D2F0) // Subtle blue border
+            val fontBlue = Color(0xFF1E29B9)      // Deep blue/purple text color
+            val robotTeal = Color(0xFF009688)     // Teal color for Robot 1
+            val robotMagenta = Color(0xFFC2185B)  // Magenta color for Robot 2
 
             // Helper to draw futuristic letter/text with glowing neon, chip structure, and 3D layers
             val drawFuturisticText = { text: String, tx: Float, ty: Float, opacity: Float, wireType: Int ->
                 if (opacity > 0f) {
                     val baseStyle = TextStyle(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 17.sp,
-                        color = neonGreen.copy(alpha = opacity)
-                    )
-                    val glowStyle = TextStyle(
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 17.sp,
-                        color = neonGreen.copy(alpha = opacity * 0.3f)
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = fontBlue.copy(alpha = opacity)
                     )
                     
-                    // Safe measurement with layout bounds
                     val textLayout = textMeasurer.measure(
                         text = text,
                         style = baseStyle,
@@ -2733,210 +2695,180 @@ fun TopBarLogo(isDark: Boolean) {
                     val lw = textLayout.size.width.toFloat()
                     val lh = textLayout.size.height.toFloat()
 
-                    // Draw Futuristic Wires (High-Tech Circuit Wire Design)
+                    // Safe box padding
+                    val boxW = lw + 18.dp.toPx()
+                    val boxH = lh + 10.dp.toPx()
+                    val bx = tx - 9.dp.toPx()
+                    val by = ty - 5.dp.toPx()
+
+                    // Draw Futuristic Wires (Capsule Wires from Image)
                     if (wireType == 1) { // TRỢ: wire down to base
+                        // Stick support wire below (turquoise/teal angle line)
                         drawLine(
-                            color = neonCyan.copy(alpha = opacity * 0.8f),
-                            start = Offset(tx + lw / 2, ty + lh),
-                            end = Offset(tx + lw / 2, h - 4.dp.toPx()),
+                            color = Color(0xFF00B0FF).copy(alpha = opacity),
+                            start = Offset(bx + boxW / 2, by + boxH),
+                            end = Offset(bx + boxW / 2 - 6.dp.toPx(), by + boxH + 8.dp.toPx()),
                             strokeWidth = 2.dp.toPx()
                         )
-                        drawCircle(color = neonCyan.copy(alpha = opacity), radius = 3.dp.toPx(), center = Offset(tx + lw / 2, h - 4.dp.toPx()))
-                        // Glow on wire dot
-                        drawCircle(color = neonCyan.copy(alpha = opacity * 0.4f), radius = 6.dp.toPx(), center = Offset(tx + lw / 2, h - 4.dp.toPx()))
+                        drawLine(
+                            color = Color(0xFF00B0FF).copy(alpha = opacity),
+                            start = Offset(bx + boxW / 2 - 6.dp.toPx(), by + boxH + 8.dp.toPx()),
+                            end = Offset(bx + boxW / 2 + 4.dp.toPx(), by + boxH + 16.dp.toPx()),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                        // Floor line below wire
+                        drawLine(
+                            color = Color.Gray.copy(alpha = opacity),
+                            start = Offset(bx + boxW / 2 - 15.dp.toPx(), by + boxH + 16.dp.toPx()),
+                            end = Offset(bx + boxW / 2 + 15.dp.toPx(), by + boxH + 16.dp.toPx()),
+                            strokeWidth = 2.dp.toPx()
+                        )
                     } else if (wireType == 2) { // VẬN: wire up to top
+                        // Oval connector plate on top
+                        drawOval(
+                            color = fontBlue.copy(alpha = opacity),
+                            topLeft = Offset(bx + boxW / 2 - 10.dp.toPx(), by - 12.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(20.dp.toPx(), 4.dp.toPx())
+                        )
+                        // Tiny hook lines connecting box to oval
                         drawLine(
-                            color = neonCyan.copy(alpha = opacity * 0.8f),
-                            start = Offset(tx + lw / 2, ty),
-                            end = Offset(tx + lw / 2, 4.dp.toPx()),
-                            strokeWidth = 2.dp.toPx()
+                            color = Color.Gray.copy(alpha = opacity),
+                            start = Offset(bx + boxW / 2 - 4.dp.toPx(), by),
+                            end = Offset(bx + boxW / 2 - 4.dp.toPx(), by - 10.dp.toPx()),
+                            strokeWidth = 1.dp.toPx()
                         )
                         drawLine(
-                            color = neonCyan.copy(alpha = opacity * 0.8f),
-                            start = Offset(tx + lw / 2, 4.dp.toPx()),
-                            end = Offset(tx + lw / 2 + 12.dp.toPx(), 4.dp.toPx()),
-                            strokeWidth = 2.dp.toPx()
+                            color = Color.Gray.copy(alpha = opacity),
+                            start = Offset(bx + boxW / 2 + 4.dp.toPx(), by),
+                            end = Offset(bx + boxW / 2 + 4.dp.toPx(), by - 10.dp.toPx()),
+                            strokeWidth = 1.dp.toPx()
                         )
-                        drawCircle(color = neonCyan.copy(alpha = opacity), radius = 3.dp.toPx(), center = Offset(tx + lw / 2 + 12.dp.toPx(), 4.dp.toPx()))
-                        // Glow on wire dot
-                        drawCircle(color = neonCyan.copy(alpha = opacity * 0.4f), radius = 6.dp.toPx(), center = Offset(tx + lw / 2 + 12.dp.toPx(), 4.dp.toPx()))
                     } else if (wireType == 3) { // HÀNH: 2 wires right
-                        val w1Y = ty + lh * 0.3f
-                        val w2Y = ty + lh * 0.7f
+                        // Right connector point
                         drawLine(
-                            color = neonYellow.copy(alpha = opacity * 0.8f),
-                            start = Offset(tx + lw, w1Y),
-                            end = Offset(tx + lw + 14.dp.toPx(), w1Y),
-                            strokeWidth = 1.5f.dp.toPx()
+                            color = robotMagenta.copy(alpha = opacity),
+                            start = Offset(bx + boxW, by + boxH / 2 - 2.dp.toPx()),
+                            end = Offset(bx + boxW + 8.dp.toPx(), by + boxH / 2 - 2.dp.toPx()),
+                            strokeWidth = 2.dp.toPx()
                         )
                         drawLine(
-                            color = neonYellow.copy(alpha = opacity * 0.8f),
-                            start = Offset(tx + lw, w2Y),
-                            end = Offset(tx + lw + 14.dp.toPx(), w2Y),
-                            strokeWidth = 1.5f.dp.toPx()
+                            color = robotMagenta.copy(alpha = opacity),
+                            start = Offset(bx + boxW, by + boxH / 2 + 2.dp.toPx()),
+                            end = Offset(bx + boxW + 8.dp.toPx(), by + boxH / 2 + 2.dp.toPx()),
+                            strokeWidth = 2.dp.toPx()
                         )
-                        drawCircle(color = neonYellow.copy(alpha = opacity), radius = 2.5f.dp.toPx(), center = Offset(tx + lw + 14.dp.toPx(), w1Y))
-                        drawCircle(color = neonYellow.copy(alpha = opacity), radius = 2.5f.dp.toPx(), center = Offset(tx + lw + 14.dp.toPx(), w2Y))
+                        // Small mini plate on the end of wire
+                        drawRect(
+                            color = robotMagenta.copy(alpha = opacity),
+                            topLeft = Offset(bx + boxW + 8.dp.toPx(), by + boxH / 2 - 4.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(4.dp.toPx(), 8.dp.toPx())
+                        )
                     }
 
-                    // 1. Draw Silicon Chip plate under the letter to represent CHIP / HARDWARE
+                    // Draw capsule container box (curved capsule layout from user screenshot)
                     drawRoundRect(
-                        color = Color(0xFF1E293B).copy(alpha = opacity * 0.85f),
-                        topLeft = Offset(tx - 3.dp.toPx(), ty - 2.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(lw + 6.dp.toPx(), lh + 4.dp.toPx()),
-                        cornerRadius = CornerRadius(4.dp.toPx())
+                        color = capsuleBg.copy(alpha = opacity),
+                        topLeft = Offset(bx, by),
+                        size = androidx.compose.ui.geometry.Size(boxW, boxH),
+                        cornerRadius = CornerRadius(10.dp.toPx())
                     )
-                    // Chip Border (Golden/Copper circuit traces)
                     drawRoundRect(
-                        color = neonCyan.copy(alpha = opacity * 0.4f),
-                        topLeft = Offset(tx - 3.dp.toPx(), ty - 2.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(lw + 6.dp.toPx(), lh + 4.dp.toPx()),
-                        cornerRadius = CornerRadius(4.dp.toPx()),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                        color = capsuleBorder.copy(alpha = opacity),
+                        topLeft = Offset(bx, by),
+                        size = androidx.compose.ui.geometry.Size(boxW, boxH),
+                        cornerRadius = CornerRadius(10.dp.toPx()),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f.dp.toPx())
                     )
-                    // Micro corner chip pins
-                    drawRect(color = neonYellow.copy(alpha = opacity * 0.7f), topLeft = Offset(tx - 4.dp.toPx(), ty + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(1.dp.toPx(), 3.dp.toPx()))
-                    drawRect(color = neonYellow.copy(alpha = opacity * 0.7f), topLeft = Offset(tx - 4.dp.toPx(), ty + lh - 5.dp.toPx()), size = androidx.compose.ui.geometry.Size(1.dp.toPx(), 3.dp.toPx()))
-                    drawRect(color = neonYellow.copy(alpha = opacity * 0.7f), topLeft = Offset(tx + lw + 3.dp.toPx(), ty + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(1.dp.toPx(), 3.dp.toPx()))
-                    drawRect(color = neonYellow.copy(alpha = opacity * 0.7f), topLeft = Offset(tx + lw + 3.dp.toPx(), ty + lh - 5.dp.toPx()), size = androidx.compose.ui.geometry.Size(1.dp.toPx(), 3.dp.toPx()))
 
-                    // 2. Draw 3D Layer Shadow (Offset bottom-right)
-                    drawText(textMeasurer, text, Offset(tx + 2.dp.toPx(), ty + 2.dp.toPx()), glowStyle)
-                    // 3. Draw Neon Glow layer
-                    drawText(textMeasurer, text, Offset(tx - 0.5f.dp.toPx(), ty - 0.5f.dp.toPx()), glowStyle)
-                    drawText(textMeasurer, text, Offset(tx + 0.5f.dp.toPx(), ty + 0.5f.dp.toPx()), glowStyle)
-                    // 4. Main Futuristic Neon text on top
+                    // Capsule inner circuitry dashes (3 small dashes on left & right of capsule)
+                    val dashW = 3.dp.toPx()
+                    val dashH = 1.dp.toPx()
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 - 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + 3.dp.toPx(), by + boxH/2 + 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2 - 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+                    drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 6.dp.toPx(), by + boxH/2 + 3.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
+
+                    // Draw main Text centered inside box
                     drawText(textMeasurer, text, Offset(tx, ty), baseStyle)
-
-                    // Micro-circuit line across letters
-                    drawLine(
-                        color = Color.White.copy(alpha = opacity * 0.6f),
-                        start = Offset(tx - 1.dp.toPx(), ty + lh / 2),
-                        end = Offset(tx + lw + 1.dp.toPx(), ty + lh / 2),
-                        strokeWidth = 1.dp.toPx()
-                    )
                 }
             }
 
-            // Draw Robot 1 (Blue/Cyan AI Futuristic Chip Robot)
+            // Draw Robot 1 (Cute Teal Stick Droid holding HỖ box on head)
             val drawRobot1 = { rx: Float, ry: Float, isFlat: Boolean ->
                 if (isFlat) {
-                    // Knocked out state: draw robot lying down rotated with electric sparks
+                    // Knocked out rotated layout on floor
                     drawRoundRect(
-                        color = neonCyan.copy(alpha = 0.4f),
+                        color = robotTeal.copy(alpha = 0.5f),
                         topLeft = Offset(rx - 8.dp.toPx(), ry + 4.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(20.dp.toPx(), 8.dp.toPx()),
-                        cornerRadius = CornerRadius(2.dp.toPx())
+                        size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 10.dp.toPx()),
+                        cornerRadius = CornerRadius(3.dp.toPx())
                     )
-                    drawCircle(color = Color.Gray, radius = 4.dp.toPx(), center = Offset(rx + 12.dp.toPx(), ry + 4.dp.toPx()))
-                    // Spark effects (AI Malfunction Sparks)
-                    val sparkT = (stateTime * 10f) % 2f
-                    if (sparkT > 1.0f) {
-                        drawLine(color = neonYellow, start = Offset(rx - 4.dp.toPx(), ry), end = Offset(rx - 8.dp.toPx(), ry - 4.dp.toPx()), strokeWidth = 2f)
-                        drawLine(color = Color.White, start = Offset(rx + 10.dp.toPx(), ry + 2.dp.toPx()), end = Offset(rx + 14.dp.toPx(), ry - 2.dp.toPx()), strokeWidth = 1.5f)
-                    }
-
-                    // Draw 3 rotating stars above head
+                    // Stars
                     val angle1 = (stateTime * 5f)
                     val starDistance = 8.dp.toPx()
                     for (i in 0..2) {
                         val sa = angle1 + (i * 120f) * (Math.PI / 180f)
                         val sx = rx + starDistance * java.lang.Math.cos(sa).toFloat()
-                        val sy = ry - 10.dp.toPx() + (3.dp.toPx()) * java.lang.Math.sin(sa).toFloat()
-                        drawCircle(color = neonYellow, radius = 2.dp.toPx(), center = Offset(sx, sy))
+                        val sy = ry - 6.dp.toPx() + (2.dp.toPx()) * java.lang.Math.sin(sa).toFloat()
+                        drawCircle(color = Color.Yellow, radius = 1.5f.dp.toPx(), center = Offset(sx, sy))
                     }
                 } else {
-                    // Main body: styled like a high-tech microprocessor chip unit
+                    // Teal block body
                     drawRoundRect(
-                        color = Color(0xFF1E293B),
-                        topLeft = Offset(rx - 7.dp.toPx(), ry - 9.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 15.dp.toPx()),
+                        color = robotTeal,
+                        topLeft = Offset(rx - 8.dp.toPx(), ry - 6.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 11.dp.toPx()),
                         cornerRadius = CornerRadius(3.dp.toPx())
                     )
-                    // Chip Border/Trace (Neon Cyan)
-                    drawRoundRect(
-                        color = neonCyan,
-                        topLeft = Offset(rx - 7.dp.toPx(), ry - 9.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 15.dp.toPx()),
-                        cornerRadius = CornerRadius(3.dp.toPx()),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f.dp.toPx())
-                    )
-                    // Visor screen (Glowing Cyan LED Matrix)
-                    drawRect(color = Color.Black, topLeft = Offset(rx - 4.dp.toPx(), ry - 6.dp.toPx()), size = androidx.compose.ui.geometry.Size(8.dp.toPx(), 4.dp.toPx()))
-                    drawRect(color = Color(0xFF00E5FF), topLeft = Offset(rx - 3.dp.toPx(), ry - 5.dp.toPx()), size = androidx.compose.ui.geometry.Size(6.dp.toPx(), 2.dp.toPx()))
+                    // Two cute circular white eyes
+                    drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(rx - 3.dp.toPx(), ry - 1.dp.toPx()))
+                    drawCircle(color = Color.White, radius = 2.dp.toPx(), center = Offset(rx + 3.dp.toPx(), ry - 1.dp.toPx()))
                     
-                    // Futuristic glowing circuit wheels / tracks
-                    drawCircle(color = Color.DarkGray, radius = 3.dp.toPx(), center = Offset(rx - 4.dp.toPx(), ry + 7.dp.toPx()))
-                    drawCircle(color = neonCyan, radius = 2.dp.toPx(), center = Offset(rx - 4.dp.toPx(), ry + 7.dp.toPx()))
-                    drawCircle(color = Color.DarkGray, radius = 3.dp.toPx(), center = Offset(rx + 4.dp.toPx(), ry + 7.dp.toPx()))
-                    drawCircle(color = neonCyan, radius = 2.dp.toPx(), center = Offset(rx + 4.dp.toPx(), ry + 7.dp.toPx()))
-                    
-                    // Sensor Antenna with glowing neon node
-                    drawLine(color = neonCyan, start = Offset(rx, ry - 9.dp.toPx()), end = Offset(rx, ry - 14.dp.toPx()), strokeWidth = 2f)
-                    drawCircle(color = neonYellow, radius = 2.5f.dp.toPx(), center = Offset(rx, ry - 14.dp.toPx()))
+                    // Cute stick legs (2 grey slanted lines)
+                    drawLine(color = Color.DarkGray, start = Offset(rx - 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 6.dp.toPx(), ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                    drawLine(color = Color.DarkGray, start = Offset(rx + 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 2.dp.toPx(), ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+
+                    // Carrying arms (slanted magenta stick arms up towards HỖ box)
+                    drawLine(color = Color(0xFFD81B60), start = Offset(rx - 7.dp.toPx(), ry - 2.dp.toPx()), end = Offset(rx - 11.dp.toPx(), ry - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                    drawLine(color = Color(0xFFD81B60), start = Offset(rx + 7.dp.toPx(), ry - 2.dp.toPx()), end = Offset(rx + 11.dp.toPx(), ry - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
                 }
             }
 
-            // Draw Robot 2 (Red aggression / battle chip robot with power hammer)
+            // Draw Robot 2 (Cute Magenta square chip droid)
             val drawRobot2 = { rx: Float, ry: Float, hammerProg: Float ->
-                // Main body: Dark combat mainframe style
+                // Magenta rectangular block
                 drawRoundRect(
-                    color = Color(0xFF334155),
-                    topLeft = Offset(rx - 8.dp.toPx(), ry - 10.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 16.dp.toPx()),
-                    cornerRadius = CornerRadius(4.dp.toPx())
-                )
-                // Red glowing visor slot
-                drawRoundRect(
-                    color = neonRed,
-                    topLeft = Offset(rx - 8.dp.toPx(), ry - 10.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 16.dp.toPx()),
-                    cornerRadius = CornerRadius(4.dp.toPx()),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5f.dp.toPx())
-                )
-                // LED Glowing Eye Line
-                drawRect(color = Color.Black, topLeft = Offset(rx - 6.dp.toPx(), ry - 7.dp.toPx()), size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 4.dp.toPx()))
-                drawRect(color = neonRed, topLeft = Offset(rx - 5.dp.toPx(), ry - 6.dp.toPx()), size = androidx.compose.ui.geometry.Size(10.dp.toPx(), 2.dp.toPx()))
-                
-                // Heavy tank treads (Combat droid base)
-                drawRoundRect(
-                    color = Color.DarkGray,
-                    topLeft = Offset(rx - 9.dp.toPx(), ry + 6.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(18.dp.toPx(), 5.dp.toPx()),
-                    cornerRadius = CornerRadius(1.dp.toPx())
-                )
-                
-                // Power Hammer with glowing electric sparks (combat hammer)
-                val swingAngle = -45f + (135f * hammerProg) // swings from -45 to 90 degrees
-                val angleRad = swingAngle * (Math.PI / 180f)
-                val handleLen = 16.dp.toPx()
-                val startX = rx - 6.dp.toPx()
-                val startY = ry - 2.dp.toPx()
-                val endX = startX + handleLen * java.lang.Math.cos(angleRad).toFloat()
-                val endY = startY - handleLen * java.lang.Math.sin(angleRad).toFloat()
-                
-                // Laser handle shaft
-                drawLine(color = neonCyan, start = Offset(startX, startY), end = Offset(endX, endY), strokeWidth = 3f)
-                
-                // Heavy industrial chip hammer head
-                drawRoundRect(
-                    color = Color(0xFF1E293B),
-                    topLeft = Offset(endX - 6.dp.toPx(), endY - 4.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 8.dp.toPx()),
+                    color = robotMagenta,
+                    topLeft = Offset(rx - 6.dp.toPx(), ry - 5.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 10.dp.toPx()),
                     cornerRadius = CornerRadius(2.dp.toPx())
                 )
-                // Hammer power traces (Glowing red lines on hammer)
-                drawRoundRect(
-                    color = neonRed,
-                    topLeft = Offset(endX - 6.dp.toPx(), endY - 4.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 8.dp.toPx()),
-                    cornerRadius = CornerRadius(2.dp.toPx()),
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
-                )
-            }
+                // Cute stick legs
+                drawLine(color = Color.Black, start = Offset(rx - 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 3.dp.toPx(), ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
+                drawLine(color = Color.Black, start = Offset(rx + 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 3.dp.toPx(), ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
 
-            // Draw background circuitry grid
-            drawMotherboardPaths()
+                // Draw hammer swing when needed
+                if (hammerProg > 0f) {
+                    val swingAngle = -45f + (135f * hammerProg)
+                    val angleRad = swingAngle * (Math.PI / 180f)
+                    val handleLen = 14.dp.toPx()
+                    val startX = rx - 4.dp.toPx()
+                    val startY = ry - 1.dp.toPx()
+                    val endX = startX + handleLen * java.lang.Math.cos(angleRad).toFloat()
+                    val endY = startY - handleLen * java.lang.Math.sin(angleRad).toFloat()
+                    
+                    drawLine(color = Color.Gray, start = Offset(startX, startY), end = Offset(endX, endY), strokeWidth = 2.dp.toPx())
+                    drawRoundRect(
+                        color = Color.DarkGray,
+                        topLeft = Offset(endX - 4.dp.toPx(), endY - 3.dp.toPx()),
+                        size = androidx.compose.ui.geometry.Size(8.dp.toPx(), 6.dp.toPx()),
+                        cornerRadius = CornerRadius(1.dp.toPx())
+                    )
+                }
+            }
 
             // --- ANIMATION TIMELINE CALCULATIONS ---
             // Width reference coordinates:
