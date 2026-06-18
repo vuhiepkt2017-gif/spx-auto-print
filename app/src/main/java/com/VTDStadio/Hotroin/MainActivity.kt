@@ -2693,7 +2693,7 @@ fun TopBarLogo(isDark: Boolean) {
                     // Safe box padding
                     val boxW = lw + 12.dp.toPx()
                     val boxH = lh + 8.dp.toPx()
-                    val bx = tx - 6.dp.toPx()
+                    val bx = tx - boxW / 2
                     val by = ty - lh - 4.dp.toPx() // Adjusted to use height bounds properly
 
                     // Draw Futuristic Wires (Capsule Wires from Image)
@@ -2780,10 +2780,10 @@ fun TopBarLogo(isDark: Boolean) {
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2), size = androidx.compose.ui.geometry.Size(dashW, dashH))
                     drawRect(color = fontBlue.copy(alpha = opacity * 0.4f), topLeft = Offset(bx + boxW - 5.dp.toPx(), by + boxH/2 + 2.dp.toPx()), size = androidx.compose.ui.geometry.Size(dashW, dashH))
 
-                    // Draw text natively to avoid maxWidth layout engine crashes completely
+                    // Draw text centered natively to avoid maxWidth layout engine crashes completely
                     drawContext.canvas.nativeCanvas.drawText(
                         text,
-                        tx,
+                        tx - lw / 2,
                         ty,
                         paint
                     )
@@ -2832,21 +2832,25 @@ fun TopBarLogo(isDark: Boolean) {
                 }
             }
 
-            // Draw Robot 2 (Cute Magenta square chip droid)
+            // Draw Robot 2 (Clone of Robot 1 with Flipped Color Palette: Magenta body, Magenta arms, Teal antenna/eyes)
             val drawRobot2 = { rx: Float, ry: Float, hammerProg: Float ->
-                // Magenta rectangular block
+                // Magenta body
                 drawRoundRect(
                     color = robotMagenta,
-                    topLeft = Offset(rx - 6.dp.toPx(), ry - 5.dp.toPx()),
-                    size = androidx.compose.ui.geometry.Size(12.dp.toPx(), 10.dp.toPx()),
-                    cornerRadius = CornerRadius(2.dp.toPx())
+                    topLeft = Offset(rx - 8.dp.toPx(), ry - 6.dp.toPx()),
+                    size = androidx.compose.ui.geometry.Size(16.dp.toPx(), 11.dp.toPx()),
+                    cornerRadius = CornerRadius(3.dp.toPx())
                 )
-                // Animated walking legs
-                val legSwing2 = java.lang.Math.sin(stateTime.toDouble() * 15.0).toFloat() * 2.dp.toPx()
-                drawLine(color = Color.Black, start = Offset(rx - 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 3.dp.toPx() + legSwing2, ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
-                drawLine(color = Color.Black, start = Offset(rx + 3.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 3.dp.toPx() - legSwing2, ry + 10.dp.toPx()), strokeWidth = 1.5f.dp.toPx())
+                // Teal eyes
+                drawCircle(color = robotTeal, radius = 2.dp.toPx(), center = Offset(rx - 3.dp.toPx(), ry - 1.dp.toPx()))
+                drawCircle(color = robotTeal, radius = 2.dp.toPx(), center = Offset(rx + 3.dp.toPx(), ry - 1.dp.toPx()))
+                
+                // Walking legs animation
+                val legSwing2 = java.lang.Math.sin(stateTime.toDouble() * 15.0).toFloat() * 3.dp.toPx()
+                drawLine(color = Color.DarkGray, start = Offset(rx - 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx - 4.dp.toPx() - 2.dp.toPx() + legSwing2, ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                drawLine(color = Color.DarkGray, start = Offset(rx + 4.dp.toPx(), ry + 5.dp.toPx()), end = Offset(rx + 4.dp.toPx() - 2.dp.toPx() - legSwing2, ry + 11.dp.toPx()), strokeWidth = 2.dp.toPx())
 
-                // Draw hammer swing when needed
+                // Draw hammer if swinging (Hammer with teal laser color)
                 if (hammerProg > 0f) {
                     val swingAngle = -45f + (135f * hammerProg)
                     val angleRad = swingAngle * (Math.PI / 180f)
@@ -2856,69 +2860,73 @@ fun TopBarLogo(isDark: Boolean) {
                     val endX = startX + handleLen * java.lang.Math.cos(angleRad).toFloat()
                     val endY = startY - handleLen * java.lang.Math.sin(angleRad).toFloat()
                     
-                    drawLine(color = Color.Gray, start = Offset(startX, startY), end = Offset(endX, endY), strokeWidth = 2.dp.toPx())
+                    drawLine(color = robotTeal, start = Offset(startX, startY), end = Offset(endX, endY), strokeWidth = 2.dp.toPx())
                     drawRoundRect(
                         color = Color.DarkGray,
                         topLeft = Offset(endX - 4.dp.toPx(), endY - 3.dp.toPx()),
                         size = androidx.compose.ui.geometry.Size(8.dp.toPx(), 6.dp.toPx()),
                         cornerRadius = CornerRadius(1.dp.toPx())
                     )
+                } else {
+                    // Regular Magenta stick arms in default state
+                    drawLine(color = robotMagenta, start = Offset(rx - 7.dp.toPx(), ry - 2.dp.toPx()), end = Offset(rx - 11.dp.toPx(), ry - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
+                    drawLine(color = robotMagenta, start = Offset(rx + 7.dp.toPx(), ry - 2.dp.toPx()), end = Offset(rx + 11.dp.toPx(), ry - 11.dp.toPx()), strokeWidth = 2.dp.toPx())
                 }
             }
 
             // --- ANIMATION TIMELINE CALCULATIONS ---
-            // Width reference coordinates:
-            // "HỖ": 20, "TRỢ": 60, "VẬN": 100, "HÀNH": 140
-            val yBase = h / 2 - 8.dp.toPx()
+            // Center the baseline vertically correctly: yBase h/2 + 2.dp.toPx() keeps it centered vertically
+            val yBase = h / 2 + 2.dp.toPx()
 
             if (stateTime in 0.0f..5.0f) {
-                // Phase 1: Robot 1 carrying "HỖ" runs back and forth strictly on the left (w*0.05f to w*0.23f)
-                // This prevents running over or covering TRỢ, VẬN, HÀNH at all.
+                // Phase 1: Robot 1 carrying "HỖ" runs back and forth strictly on the left (w*0.06f to w*0.26f)
                 val cycle = java.lang.Math.sin((stateTime / 5.0f) * 3.0f * Math.PI * 2.0f).toFloat()
-                val r1X = w * 0.14f + (w * 0.09f * cycle)
+                val r1X = w * 0.16f + (w * 0.10f * cycle)
                 val r1Y = yBase + 12.dp.toPx()
                 
-                drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
-                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+                // Centered coordinates for HỖ TRỢ VẬN HÀNH
+                // Spacing w*0.42, w*0.60, w*0.78
+                drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
+                drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
 
-                // Carrying "HỖ" on head
-                drawFuturisticText("HỖ", r1X - 8.dp.toPx(), r1Y - 25.dp.toPx(), 1.0f, 0)
+                // Carrying "HỖ" on head - lowered y-offset down to r1Y - 17.dp.toPx()
+                drawFuturisticText("HỖ", r1X - 6.dp.toPx(), r1Y - 17.dp.toPx(), 1.0f, 0)
                 drawRobot1(r1X, r1Y, false)
 
             } else if (stateTime in 5.0f..6.0f) {
                 // Phase 2: Robot 1 stops and throws "HỖ" up to disappear
                 val t = stateTime - 5.0f
-                val r1X = w * 0.14f
+                val r1X = w * 0.16f
                 val r1Y = yBase + 12.dp.toPx()
                 
-                drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
-                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+                drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
+                drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
 
                 // "HỖ" flying up & fading
-                val flyY = (r1Y - 25.dp.toPx()) - (t * 80.dp.toPx())
+                val flyY = (r1Y - 17.dp.toPx()) - (t * 80.dp.toPx())
                 val hoOpacity = (1.0f - t).coerceIn(0f, 1f)
-                drawFuturisticText("HỖ", r1X - 8.dp.toPx(), flyY, hoOpacity, 0)
+                drawFuturisticText("HỖ", r1X - 6.dp.toPx(), flyY, hoOpacity, 0)
                 drawRobot1(r1X, r1Y, false)
 
             } else if (stateTime in 6.0f..7.5f) {
                 // Phase 3: Robot 1 walks to "TRỢ" and kicks it to the right off-screen
                 val t = stateTime - 6.0f
-                val startR1X = w * 0.14f
-                val endR1X = w * 0.28f // stops just left/right of TRỢ (w * 0.32) to kick
+                val startR1X = w * 0.16f
+                val endR1X = w * 0.38f // stops just left of TRỢ (w * 0.42) to kick
                 val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
                 val r1Y = yBase + 12.dp.toPx()
 
-                drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+                drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
+                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
 
                 // "TRỢ" flies off if kick has happened (let's say kick at t > 0.8s)
                 if (t < 0.8f) {
-                    drawFuturisticText("TRỢ", w * 0.32f, yBase, 1.0f, 1)
+                    drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
                 } else {
                     val kickProgress = ((t - 0.8f) / 0.7f).coerceIn(0f, 1f)
-                    val troX = w * 0.32f + kickProgress * w * 0.8f
+                    val troX = w * 0.42f + kickProgress * w * 0.8f
                     val troY = yBase - (java.lang.Math.sin(kickProgress * Math.PI).toFloat() * 15.dp.toPx())
                     val troOpacity = (1.0f - kickProgress).coerceIn(0f, 1f)
                     drawFuturisticText("TRỢ", troX, troY, troOpacity, 1)
@@ -2928,55 +2936,55 @@ fun TopBarLogo(isDark: Boolean) {
             } else if (stateTime in 7.5f..9.0f) {
                 // Phase 4: Robot 1 jumps on top of "VẬN" breaking and sinking it
                 val t = stateTime - 7.5f
-                val startR1X = w * 0.28f
-                val endR1X = w * 0.52f
+                val startR1X = w * 0.38f
+                val endR1X = w * 0.64f // on top of VẬN (w * 0.60)
                 val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
                 
                 // Jump arc
                 val jumpProgress = (t / 1.5f).coerceIn(0f, 1f)
                 val r1Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(jumpProgress * Math.PI).toFloat() * 20.dp.toPx())
 
-                drawFuturisticText("HÀNH", w * 0.64f, yBase, 1.0f, 3)
+                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
 
                 // VẬN behavior: breaks and sinks on land (land happens at jumpProgress > 0.8s)
                 if (jumpProgress < 0.8f) {
-                    drawFuturisticText("VẬN", w * 0.48f, yBase, 1.0f, 2)
+                    drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
                 } else {
                     val sinkProgress = (jumpProgress - 0.8f) / 0.2f
                     val vanY = yBase + sinkProgress * 40.dp.toPx()
                     // Draw VẬN broken/split
-                    drawFuturisticText("VẬ", w * 0.48f - 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
-                    drawFuturisticText("N", w * 0.53f + 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
+                    drawFuturisticText("VẬ", w * 0.60f - 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
+                    drawFuturisticText("N", w * 0.65f + 5f * sinkProgress, vanY, 1.0f - sinkProgress, 0)
                 }
                 drawRobot1(r1X, r1Y, false)
 
             } else if (stateTime in 9.0f..10.5f) {
-                // Phase 5: Robot 1 walks to drag "HÀNH" to the left (approx w * 0.32f)
+                // Phase 5: Robot 1 walks to drag "HÀNH" to the left (approx w * 0.22f)
                 val t = stateTime - 9.0f
                 val walkProgress = (t / 1.5f).coerceIn(0f, 1f)
                 
-                // Robot runs right, grabs HÀNH, drags it left
+                // Robot runs right, grabs HÀNH at w * 0.88f, drags it left to w * 0.22f
                 val r1X = if (walkProgress < 0.4f) {
-                    w * 0.52f + (w * 0.18f * (walkProgress / 0.4f))
+                    w * 0.64f + (w * 0.24f * (walkProgress / 0.4f))
                 } else {
-                    w * 0.70f - (w * 0.38f * ((walkProgress - 0.4f) / 0.6f))
+                    w * 0.88f - (w * 0.66f * ((walkProgress - 0.4f) / 0.6f))
                 }
                 val r1Y = yBase + 12.dp.toPx()
 
                 // "HÀNH" position
                 val hanhX = if (walkProgress < 0.4f) {
-                    w * 0.64f
+                    w * 0.78f
                 } else {
-                    w * 0.64f - (w * 0.32f * ((walkProgress - 0.4f) / 0.6f))
+                    w * 0.78f - (w * 0.56f * ((walkProgress - 0.4f) / 0.6f))
                 }
                 drawFuturisticText("HÀNH", hanhX, yBase, 1.0f, 3)
                 drawRobot1(r1X, r1Y, false)
 
             } else if (stateTime in 10.5f..12.5f) {
-                // Phase 6: Robot 1 jumps up and pulls down "LÀ" from the sky to w * 0.48f
+                // Phase 6: Robot 1 jumps up and pulls down "LÀ" from the sky to w * 0.50f
                 val t = stateTime - 10.5f
                 val jumpProgress = (t / 2.0f).coerceIn(0f, 1f)
-                val r1X = w * 0.32f + (w * 0.16f * jumpProgress)
+                val r1X = w * 0.22f + (w * 0.28f * jumpProgress)
                 
                 // jump and pull arc
                 val r1Y = if (jumpProgress < 0.5f) {
@@ -2985,36 +2993,36 @@ fun TopBarLogo(isDark: Boolean) {
                     yBase + 12.dp.toPx()
                 }
 
-                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
 
                 // "LÀ" drops from top at jumpProgress > 0.5
                 if (jumpProgress > 0.5f) {
                     val dropProgress = (jumpProgress - 0.5f) / 0.5f
                     val laY = -15.dp.toPx() + (yBase + 15.dp.toPx()) * dropProgress
-                    drawFuturisticText("LÀ", w * 0.48f, laY, 1.0f, 0)
+                    drawFuturisticText("LÀ", w * 0.50f, laY, 1.0f, 0)
                 }
                 drawRobot1(r1X, r1Y, false)
 
             } else if (stateTime in 12.5f..14.5f) {
-                // Phase 7: Robot 1 walks right to pull/drag "CHÍNH" in from off-screen right
+                // Phase 7: Robot 1 walks right to pull/drag "CHÍNH" in from off-screen right to w * 0.78f
                 val t = stateTime - 12.5f
                 val walkProgress = (t / 2.0f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
-                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
 
                 val r1X = if (walkProgress < 0.5f) {
-                    w * 0.48f + (w * 0.35f * (walkProgress / 0.5f))
+                    w * 0.50f + (w * 0.38f * (walkProgress / 0.5f))
                 } else {
-                    w * 0.83f - (w * 0.19f * ((walkProgress - 0.5f) / 0.5f))
+                    w * 0.88f - (w * 0.10f * ((walkProgress - 0.5f) / 0.5f))
                 }
                 val r1Y = yBase + 12.dp.toPx()
 
-                // "CHÍNH" dragged from w * 1.0f to w * 0.64f
+                // "CHÍNH" dragged from w * 1.0f to w * 0.78f
                 val chinX = if (walkProgress < 0.5f) {
                     w * 1.0f
                 } else {
-                    w * 1.0f - (w * 0.36f * ((walkProgress - 0.5f) / 0.5f))
+                    w * 1.0f - (w * 0.22f * ((walkProgress - 0.5f) / 0.5f))
                 }
                 drawFuturisticText("CHÍNH", chinX, yBase, 1.0f, 0)
                 drawRobot1(r1X, r1Y, false)
@@ -3024,12 +3032,12 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 14.5f
                 val enterProgress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
-                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
-                drawFuturisticText("CHÍNH", w * 0.64f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
+                drawFuturisticText("CHÍNH", w * 0.78f, yBase, 1.0f, 0)
 
-                // Robot 2 walks in from right (w * 1.0f) to w * 0.75f
-                val r2X = w * 1.0f - (w * 0.25f * enterProgress)
+                // Robot 2 walks in from right (w * 1.0f) to w * 0.88f
+                val r2X = w * 1.0f - (w * 0.12f * enterProgress)
                 val r2Y = yBase + 12.dp.toPx()
 
                 // Swing hammer at end of phase
@@ -3041,7 +3049,7 @@ fun TopBarLogo(isDark: Boolean) {
 
                 // Robot 1 is knocked out when hit
                 val isR1KnockedOut = enterProgress > 0.85f
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), isR1KnockedOut)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), isR1KnockedOut)
                 drawRobot2(r2X, r2Y, hammerProgress)
 
             } else if (stateTime in 16.0f..17.5f) {
@@ -3049,21 +3057,21 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 16.0f
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
-                drawFuturisticText("LÀ", w * 0.48f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
 
                 // Robot 2 kicks CHÍNH
-                val r2X = w * 0.75f - (w * 0.08f * progress)
+                val r2X = w * 0.88f - (w * 0.08f * progress)
                 val r2Y = yBase + 12.dp.toPx()
 
                 // CHÍNH flies right and disappears
-                val chinX = w * 0.64f + progress * w * 0.6f
+                val chinX = w * 0.78f + progress * w * 0.6f
                 val chinY = yBase - (java.lang.Math.sin(progress * Math.PI).toFloat() * 12.dp.toPx())
                 val chinOpacity = (1.0f - progress).coerceIn(0f, 1f)
                 drawFuturisticText("CHÍNH", chinX, chinY, chinOpacity, 0)
 
                 // Robot 1 is knocked out on floor
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true)
                 drawRobot2(r2X, r2Y, 0f)
 
             } else if (stateTime in 17.5f..19.0f) {
@@ -3071,18 +3079,18 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 17.5f
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
 
-                // Robot 2 moves to kick "LÀ"
-                val r2X = w * 0.67f - (w * 0.15f * progress)
+                // Robot 2 moves to kick "LÀ" at w * 0.50f
+                val r2X = w * 0.80f - (w * 0.20f * progress)
                 val r2Y = yBase + 12.dp.toPx()
 
                 // "LÀ" flies up
                 val laY = yBase - progress * 80.dp.toPx()
                 val laOpacity = (1.0f - progress).coerceIn(0f, 1f)
-                drawFuturisticText("LÀ", w * 0.48f, laY, laOpacity, 0)
+                drawFuturisticText("LÀ", w * 0.50f, laY, laOpacity, 0)
 
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true)
                 drawRobot2(r2X, r2Y, 0f)
 
             } else if (stateTime in 19.0f..20.0f) {
@@ -3090,20 +3098,20 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 19.0f
                 val progress = (t / 1.0f).coerceIn(0f, 1f)
 
-                // Jump arc of Robot 2
-                val r2X = w * 0.52f - (w * 0.16f * progress)
+                // Jump arc of Robot 2 (lands on HÀNH at w * 0.22f, stopping around w * 0.26f)
+                val r2X = w * 0.60f - (w * 0.34f * progress)
                 val r2Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(progress * Math.PI).toFloat() * 16.dp.toPx())
 
                 // "HÀNH" sinks when Robot 2 lands (progress > 0.8)
                 if (progress < 0.8f) {
-                    drawFuturisticText("HÀNH", w * 0.32f, yBase, 1.0f, 0)
+                    drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
                 } else {
                     val sinkProgress = ((progress - 0.8f) / 0.2f).coerceIn(0f, 1f)
                     val hanhOpacity = (1.0f - sinkProgress).coerceIn(0f, 1f)
-                    drawFuturisticText("HÀNH", w * 0.32f, yBase + sinkProgress * 40.dp.toPx(), hanhOpacity, 0)
+                    drawFuturisticText("HÀNH", w * 0.22f, yBase + sinkProgress * 40.dp.toPx(), hanhOpacity, 0)
                 }
 
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true)
                 drawRobot2(r2X, r2Y, 0f)
 
             } else if (stateTime in 20.0f..21.5f) {
@@ -3112,10 +3120,10 @@ fun TopBarLogo(isDark: Boolean) {
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
                 // Sinks the whole view frame / floor
-                val r2X = w * 0.36f
+                val r2X = w * 0.26f
                 val r2Y = (yBase + 12.dp.toPx()) + progress * 50.dp.toPx()
 
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx() + progress * 50.dp.toPx(), true)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx() + progress * 50.dp.toPx(), true)
                 drawRobot2(r2X, r2Y, 0f)
 
             } else if (stateTime in 21.5f..22.5f) {
@@ -3123,11 +3131,11 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 21.5f
                 val progress = (t / 1.0f).coerceIn(0f, 1f)
 
-                val r2X = w * 0.36f - progress * w * 0.5f
+                val r2X = w * 0.26f - progress * w * 0.5f
                 val r2Y = yBase + 12.dp.toPx()
 
                 // Robot 1 is still flat on floor
-                drawRobot1(w * 0.64f, yBase + 12.dp.toPx(), true)
+                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true)
                 drawRobot2(r2X, r2Y, 0f)
 
             } else if (stateTime in 22.5f..24.0f) {
@@ -3135,7 +3143,7 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 22.5f
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
-                val r1X = w * 0.64f - progress * w * 0.64f
+                val r1X = w * 0.78f - progress * w * 0.78f
                 val r1Y = yBase + 12.dp.toPx()
 
                 drawRobot1(r1X, r1Y, false)
