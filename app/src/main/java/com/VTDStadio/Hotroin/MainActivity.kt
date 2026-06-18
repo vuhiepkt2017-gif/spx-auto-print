@@ -2687,9 +2687,9 @@ fun TopBarLogo(isDark: Boolean) {
                         style = baseStyle,
                         constraints = androidx.compose.ui.unit.Constraints(
                             minWidth = 0,
-                            maxWidth = w.toInt().coerceAtLeast(1),
+                            maxWidth = w.toInt().coerceAtLeast(100),
                             minHeight = 0,
-                            maxHeight = h.toInt().coerceAtLeast(1)
+                            maxHeight = h.toInt().coerceAtLeast(50)
                         )
                     )
                     val lw = textLayout.size.width.toFloat()
