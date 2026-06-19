@@ -923,11 +923,13 @@ fun ShopeeAutoPrintApp(
 
     // Periodic check for error codes from Google Sheet WebApp
     LaunchedEffect(currentUserEmail, webAppUrl, isPollingActive) {
-        if (currentUserEmail.isBlank() || webAppUrl.isBlank()) return@LaunchedEffect
-        while (true) {
-            // Auto timeout fast polling after 2 minutes (120 seconds) of inactivity
-            if (isPollingActive && (System.currentTimeMillis() - lastPrintTime > 120000L)) {
+        if (currentUserEmail.isBlank() || webAppUrl.isBlank() || !isPollingActive) return@LaunchedEffect
+        
+        while (isPollingActive) {
+            // Auto timeout fast polling after 1 minute (60 seconds) of inactivity
+            if (System.currentTimeMillis() - lastPrintTime > 60000L) {
                 isPollingActive = false
+                break
             }
 
             try {
@@ -1011,9 +1013,8 @@ fun ShopeeAutoPrintApp(
                 Log.e("ShopeeAutoPrint", "Error fetching error codes: ${e.message}")
             }
             
-            // If active, poll fast (every 3 seconds). If idle, poll very slowly (every 45 seconds) to prevent overload.
-            val waitTime = if (isPollingActive) 3000L else 45000L
-            delay(waitTime)
+            // Poll every 3 seconds while active
+            delay(3000L)
         }
     }
 
