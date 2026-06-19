@@ -1076,6 +1076,13 @@ fun ShopeeAutoPrintApp(
                         chuyenPickLockedUntil = snapshot.getDate("chuyenPickLockedUntil")
                         val reportsList = snapshot.get("reports") as? List<Map<String, Any>>
                         chuyenPickLockedReports = reportsList ?: emptyList()
+                        
+                        // Dynamically update user role from Firestore if it changes or exists
+                        val serverRole = snapshot.getString("role")
+                        if (!serverRole.isNullOrBlank() && serverRole != currentUserRole) {
+                            currentUserRole = serverRole
+                            sharedPreferences.edit().putString("user_role", serverRole).apply()
+                        }
                     }
                 }
             userNotifListener = db.collection("active_riders").document(currentUserEmail)
@@ -4596,22 +4603,30 @@ fun ChuyenPickView(
                         }
                 }
 
-                if (activeSupportList.isNotEmpty()) {
-                    GlassmorphicCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        borderColor = getGlassBorderColor(isDark),
-                        glowColor = ThemeCyan
+                GlassmorphicCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = getGlassBorderColor(isDark),
+                    glowColor = ThemeCyan
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Text(
+                            "Danh sách yêu cầu hỗ trợ:",
+                            fontWeight = FontWeight.Bold,
+                            color = getTextColor(isDark),
+                            fontSize = 13.sp
+                        )
+
+                        if (activeSupportList.isEmpty()) {
                             Text(
-                                "Danh sách yêu cầu hỗ trợ:",
-                                fontWeight = FontWeight.Bold,
-                                color = getTextColor(isDark),
-                                fontSize = 13.sp
+                                "Không có yêu cầu hỗ trợ nào.",
+                                color = getTextColor(isDark).copy(alpha = 0.6f),
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
                             )
+                        } else {
 
                             activeSupportList.forEach { item ->
                                 val dId = item["docId"]?.toString() ?: ""
@@ -4776,9 +4791,9 @@ fun ChuyenPickView(
                         }
                     }
                 }
+            }
         }
     }
-}
 }
 
 fun getRemainingTimeText(untilDate: Date?, isLocked: Boolean): String {
