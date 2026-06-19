@@ -2833,11 +2833,14 @@ fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String
 
 fun extractPupCode(text: String): String? {
     if (text.isBlank()) return null
-    // Matches PUP (or OCR variants) + 8 date chars + 4-to-8 suffix chars
-    val regex = Regex("(?i)\\b(PUP|FUP|PLP|PU|P0P|PO[PD])\\s*([0-9OILSGZ]{8})\\s*([A-Z0-9]{4,8})\\b")
-    val match = regex.find(text)
+    // 1. Remove all spaces and newlines
+    val cleanText = text.replace("\\s".toRegex(), "").uppercase(Locale.ROOT)
+    
+    // 2. Match: PUP (or variants) + 8 date chars + 4-to-8 suffix chars
+    val regex = Regex("(PUP|FUP|PLP|P0P|POP|POD|PU|PLP|F0P|PUPP)([0-9OILSGZ]{8})([A-Z0-9]{4,8})")
+    val match = regex.find(cleanText)
     if (match != null) {
-        val datePart = match.groupValues[2].uppercase(Locale.ROOT).map { char ->
+        val datePart = match.groupValues[2].map { char ->
             when (char) {
                 'O' -> '0'
                 'I', 'L' -> '1'
@@ -2847,14 +2850,15 @@ fun extractPupCode(text: String): String? {
                 else -> char
             }
         }.joinToString("")
-        val suffixPart = match.groupValues[3].uppercase(Locale.ROOT)
+        val suffixPart = match.groupValues[3]
         return "PUP" + datePart + suffixPart
     }
-    // Fallback: search for PUP followed by digits/letters but with word boundaries
-    val simpleRegex = Regex("(?i)\\b(PUP|FUP|PLP|PU|P0P|PO[PD])\\s*([A-Z0-9]{12,16})\\b")
-    val simpleMatch = simpleRegex.find(text)
+    
+    // Fallback: match PUP (or variants) + 12-to-16 alphanumeric chars
+    val simpleRegex = Regex("(PUP|FUP|PLP|P0P|POP|POD|PU)([A-Z0-9]{12,16})")
+    val simpleMatch = simpleRegex.find(cleanText)
     if (simpleMatch != null) {
-        val full = simpleMatch.groupValues[2].uppercase(Locale.ROOT)
+        val full = simpleMatch.groupValues[2]
         val datePart = full.substring(0, 8).map { char ->
             when (char) {
                 'O' -> '0'
@@ -2868,9 +2872,10 @@ fun extractPupCode(text: String): String? {
         val suffixPart = full.substring(8)
         return "PUP" + datePart + suffixPart
     }
-    // Backup fallback: Just find 9 followed by 4 or 5 digits
-    val backupRegex = Regex("\\b9[0-9]{4,5}\\b")
-    val backupMatch = backupRegex.find(text)
+    
+    // Backup fallback: Just find any sequence of 8 digits + 4-to-8 alphanumeric chars
+    val backupRegex = Regex("([0-9]{8})([A-Z0-9]{4,8})")
+    val backupMatch = backupRegex.find(cleanText)
     if (backupMatch != null) {
         return "PUP" + backupMatch.value
     }
@@ -3807,6 +3812,44 @@ fun ChuyenPickView(
         }
     }
 
+    var supportPup by remember { mutableStateOf("") }
+    var supportAddress by remember { mutableStateOf("") }
+    var isSupportSubmitting by remember { mutableStateOf(false) }
+
+    val supportOcrPhotoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: android.net.Uri? ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    if (bitmap != null) {
+                        val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
+                        recognizer.process(inputImage)
+                            .addOnSuccessListener { visionText ->
+                                val code = extractPupCode(visionText.text)
+                                if (code != null) {
+                                    supportPup = code
+                                    Toast.makeText(context, "Đã tìm thấy mã PUP hỗ trợ: $code", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                }
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Lỗi mở ảnh: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
     var searchDriverQuery by remember { mutableStateOf("") }
 
     LazyColumn(
@@ -3929,11 +3972,13 @@ fun ChuyenPickView(
                                 )
                             )
 
-                            val filteredDrivers = driversList.filter { driver ->
-                                val name = driver["name"]?.toString() ?: ""
-                                val code = driver["code"]?.toString() ?: ""
-                                name.contains(searchDriverQuery, ignoreCase = true) || code.contains(searchDriverQuery, ignoreCase = true)
-                            }
+                            val filteredDrivers = driversList
+                                .filter { it["isOutHub"] as? Boolean != true }
+                                .filter { driver ->
+                                    val name = driver["name"]?.toString() ?: ""
+                                    val code = driver["code"]?.toString() ?: ""
+                                    name.contains(searchDriverQuery, ignoreCase = true) || code.contains(searchDriverQuery, ignoreCase = true)
+                                }
 
                             if (filteredDrivers.isEmpty()) {
                                 DropdownMenuItem(
@@ -4277,14 +4322,9 @@ fun ChuyenPickView(
             }
         }
 
-        // HỖ TRỢ ĐẨY PICK (CHỈ ADMIN THẤY)
-        if (currentUserRole == "Admin") {
+        // HỖ TRỢ ĐẨY PICK (HIỂN THỊ CHO RIDER, ADMIN KHÔNG CẦN PHẦN NÀY)
+        if (currentUserRole != "Admin") {
             item {
-                var supportPup by remember { mutableStateOf("") }
-                var supportTargetDriver by remember { mutableStateOf("") }
-                var supportAddress by remember { mutableStateOf("") }
-                var isSupportSubmitting by remember { mutableStateOf(false) }
-
                 var activeSupportList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
 
                 // Load active support pushes
@@ -4308,7 +4348,7 @@ fun ChuyenPickView(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            "HỖ TRỢ ĐẨY PICK (CHỈ ADMIN THẤY)",
+                            "HỖ TRỢ ĐẨY PICK",
                             fontWeight = FontWeight.Bold,
                             color = ThemePrimary,
                             fontSize = 15.sp
@@ -4329,74 +4369,29 @@ fun ChuyenPickView(
                             )
                         )
 
-                        // Dropdown for Rider ngoài hub
-                        val outHubDrivers = driversList.filter { it["isOutHub"] as? Boolean ?: false }
-                        var supportDropdownExpanded by remember { mutableStateOf(false) }
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
-                                value = supportTargetDriver,
-                                onValueChange = {},
-                                readOnly = true,
-                                placeholder = { Text("Chọn Rider ngoài Hub (hoặc điền địa chỉ)", color = getTextColor(isDark).copy(alpha = 0.6f)) },
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = false,
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    disabledTextColor = getTextColor(isDark),
-                                    disabledBorderColor = ThemePrimary.copy(alpha = 0.5f),
-                                    disabledContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                    disabledPlaceholderColor = getTextColor(isDark).copy(alpha = 0.6f)
-                                ),
-                                trailingIcon = {
-                                    IconButton(onClick = { supportDropdownExpanded = true }) {
-                                        Icon(Icons.Default.ArrowDropDown, contentDescription = "Dropdown", tint = getTextColor(isDark))
-                                    }
-                                }
+                        // Button: Chọn ảnh hỗ trợ
+                        Premium3DButton(
+                            onClick = {
+                                supportOcrPhotoLauncher.launch("image/*")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            containerBrush = getButtonGradientBrush(isDark),
+                            shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                        ) {
+                            Icon3D(
+                                imageVector = Icons.Default.Image,
+                                contentDescription = "Chọn ảnh hỗ trợ",
+                                tint = getButtonTextColor(),
+                                size = 20.dp
                             )
-                            // Invisible clickable overlay to ensure clicks work anywhere on the field
-                            Box(
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .clickable { supportDropdownExpanded = true }
-                            )
-                            DropdownMenu(
-                                expanded = supportDropdownExpanded,
-                                onDismissRequest = { supportDropdownExpanded = false },
-                                modifier = Modifier.fillMaxWidth(0.85f).heightIn(max = 200.dp).background(if (isDark) Color(0xFFCCCCCC) else Color(0xFFE2E4EB))
-                            ) {
-                                if (outHubDrivers.isEmpty()) {
-                                    DropdownMenuItem(
-                                        text = { Text("Chưa có Rider ngoài Hub nào", color = Color.Black.copy(alpha = 0.5f)) },
-                                        onClick = { supportDropdownExpanded = false }
-                                    )
-                                } else {
-                                    outHubDrivers.forEachIndexed { i, dr ->
-                                        val n = dr["name"]?.toString() ?: ""
-                                        val c = dr["code"]?.toString() ?: ""
-                                        val disp = "$n - $c"
-                                        if (i > 0) {
-                                            Divider(
-                                                color = Color.Black.copy(alpha = 0.15f),
-                                                thickness = 1.dp,
-                                                modifier = Modifier.padding(horizontal = 8.dp)
-                                            )
-                                        }
-                                        DropdownMenuItem(
-                                            text = { Text(disp, color = Color.Black, fontWeight = FontWeight.Medium) },
-                                            onClick = {
-                                                supportTargetDriver = disp
-                                                supportDropdownExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Chọn ảnh hỗ trợ", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedTextField(
                             value = supportAddress,
                             onValueChange = { supportAddress = it },
-                            placeholder = { Text("Hoặc ghi rõ Địa Chỉ / Rider khác", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                            placeholder = { Text("Ghi rõ Địa Chỉ hoặc Rider nhận hỗ trợ", color = getTextColor(isDark).copy(alpha = 0.6f)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedTextColor = getTextColor(isDark),
@@ -4414,9 +4409,9 @@ fun ChuyenPickView(
                                     Toast.makeText(context, "Vui lòng nhập mã PUP!", Toast.LENGTH_SHORT).show()
                                     return@Premium3DButton
                                 }
-                                val receiverStr = supportTargetDriver.ifBlank { supportAddress }
+                                val receiverStr = supportAddress
                                 if (receiverStr.isBlank()) {
-                                    Toast.makeText(context, "Vui lòng chọn Rider hoặc điền địa chỉ!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Vui lòng điền địa chỉ hoặc Rider nhận hỗ trợ!", Toast.LENGTH_SHORT).show()
                                     return@Premium3DButton
                                 }
 
@@ -4433,7 +4428,6 @@ fun ChuyenPickView(
                                 )).addOnSuccessListener {
                                     isSupportSubmitting = false
                                     supportPup = ""
-                                    supportTargetDriver = ""
                                     supportAddress = ""
                                     Toast.makeText(context, "Đã gửi yêu cầu hỗ trợ!", Toast.LENGTH_SHORT).show()
                                 }.addOnFailureListener {
