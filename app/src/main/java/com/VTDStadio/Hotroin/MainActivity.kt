@@ -2580,6 +2580,35 @@ fun LoginScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("ĐĂNG NHẬP GOOGLE", fontWeight = FontWeight.Bold, color = getButtonTextColor())
                             }
+                            
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            OutlinedButton(
+                                onClick = {
+                                    // Bypass Google Login and log in directly as a Tester
+                                    onLoginSuccess("tester@gmail.com", "Tester Account", "Rider", true, "TESTER", "Tester")
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                border = BorderStroke(1.dp, ThemePrimary.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color.Transparent
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Science,
+                                    contentDescription = "Tester Login",
+                                    tint = ThemePrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    "ĐĂNG NHẬP TESTER (Bypass)",
+                                    fontWeight = FontWeight.Bold,
+                                    color = getTextColor(isDark)
+                                )
+                            }
                         } else {
                             Text(
                                 "Nhập Code Rider Kích Hoạt",
