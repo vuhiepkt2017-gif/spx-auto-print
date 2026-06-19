@@ -238,15 +238,16 @@ fun Premium3DButton(
     shadowColor: Color,
     content: @Composable RowScope.() -> Unit
 ) {
-    // Softer, lighter gradients for all color-based buttons
-    val c1 = containerColor.copy(alpha = 0.65f)
-    val c2 = containerColor.copy(alpha = 0.45f)
+    val isDark = LocalThemeIsDark.current
+    // In light mode, make gradients much softer/lighter (0.45f -> 0.25f)
+    val c1 = if (isDark) containerColor.copy(alpha = 0.65f) else containerColor.copy(alpha = 0.4f)
+    val c2 = if (isDark) containerColor.copy(alpha = 0.45f) else containerColor.copy(alpha = 0.25f)
     Premium3DButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
         containerBrush = Brush.linearGradient(listOf(c1, c2)),
-        shadowColor = shadowColor.copy(alpha = 0.5f), // softer shadow
+        shadowColor = if (isDark) shadowColor.copy(alpha = 0.5f) else shadowColor.copy(alpha = 0.3f), // softer shadow in light mode
         content = content
     )
 }
@@ -1662,25 +1663,31 @@ fun UserAccountView(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text("Thông tin đăng nhập:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 14.sp)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(12.dp))
                 Text("Email: $currentUserEmail", color = getTextColor(isDark), fontSize = 13.sp)
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text("Tên: $currentUserName", color = getTextColor(isDark), fontSize = 13.sp)
                 
                 val roleDisplayName = when (currentUserRole) {
                     "Driver" -> "Tài xế (Driver)"
                     else -> currentUserRole
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 Text("Vai trò: $roleDisplayName", color = ThemeAccent, fontWeight = FontWeight.Medium, fontSize = 13.sp)
                 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(28.dp))
                 
+                val logoutBrush = if (isDark) {
+                    Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemeAccent.copy(alpha = 0.8f)))
+                } else {
+                    Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.4f), ThemeAccent.copy(alpha = 0.4f)))
+                }
+
                 Premium3DButton(
                     onClick = onLogout,
                     modifier = Modifier.fillMaxWidth(),
-                    containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
-                    shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                    containerBrush = logoutBrush,
+                    shadowColor = ThemePrimary.copy(alpha = if (isDark) 0.4f else 0.2f)
                 ) {
                     Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor())
                     Spacer(modifier = Modifier.width(8.dp))
@@ -1740,16 +1747,23 @@ fun AdminDashboardView(
                 ) {
                     Column {
                         Text("Thông tin đăng nhập:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text("Email: $currentUserEmail", color = getTextColor(isDark), fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text("Tên: $currentUserName", color = getTextColor(isDark), fontSize = 12.sp)
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text("Vai trò: Quản trị viên (Admin)", color = Color(0xFFFFA000), fontWeight = FontWeight.Medium, fontSize = 12.sp)
+                    }
+                    val adminLogoutBrush = if (isDark) {
+                        Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemeAccent.copy(alpha = 0.8f)))
+                    } else {
+                        Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.4f), ThemeAccent.copy(alpha = 0.4f)))
                     }
                     Premium3DButton(
                         onClick = onLogout,
                         modifier = Modifier.width(110.dp).height(36.dp),
-                        containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemePrimary)),
-                        shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                        containerBrush = adminLogoutBrush,
+                        shadowColor = ThemePrimary.copy(alpha = if (isDark) 0.4f else 0.2f)
                     ) {
                         Icon(Icons.Default.Logout, contentDescription = "Đăng xuất", tint = getButtonTextColor(), modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
