@@ -916,8 +916,12 @@ fun ShopeeAutoPrintApp(
         }
     }
 
+    var userNotifications by remember { mutableStateOf<List<Map<String, Any>>>(emptyList()) }
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+
     DisposableEffect(isLoggedIn, currentUserEmail) {
         var userLockListener: ListenerRegistration? = null
+        var userNotifListener: ListenerRegistration? = null
         if (isLoggedIn && currentUserEmail.isNotBlank()) {
             userLockListener = db.collection("active_riders").document(currentUserEmail)
                 .addSnapshotListener { snapshot, error ->
@@ -930,9 +934,18 @@ fun ShopeeAutoPrintApp(
                         chuyenPickLockedReports = reportsList ?: emptyList()
                     }
                 }
+            userNotifListener = db.collection("active_riders").document(currentUserEmail)
+                .collection("notifications")
+                .addSnapshotListener { snapshot, error ->
+                    if (snapshot != null) {
+                        val notifs = snapshot.documents.mapNotNull { it.data }.sortedByDescending { it["timeMs"] as? Long ?: 0L }
+                        userNotifications = notifs
+                    }
+                }
         }
         onDispose {
             userLockListener?.remove()
+            userNotifListener?.remove()
         }
     }
 
@@ -1191,7 +1204,7 @@ fun ShopeeAutoPrintApp(
                             TopBarLogo(isDark = isDark)
                         },
                         actions = {
-                            IconButton(onClick = { /* notification action */ }) {
+                            IconButton(onClick = { showNotificationsDialog = true }) {
                                 Icon(
                                     imageVector = Icons.Default.Notifications,
                                     contentDescription = "Thông báo",
@@ -1274,6 +1287,44 @@ fun ShopeeAutoPrintApp(
                         .background(getThemeBgBrush(isDark))
                 ) {
                     AIParticleBackground()
+
+                    if (showNotificationsDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showNotificationsDialog = false },
+                            title = { Text("Thông báo lỗi đẩy sai", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+                            text = {
+                                if (userNotifications.isEmpty()) {
+                                    Text("Bạn không có thông báo nào.", color = getTextColor(isDark))
+                                } else {
+                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(userNotifications) { notif ->
+                                            val message = notif["message"]?.toString() ?: ""
+                                            val timestamp = notif["timestamp"]?.toString() ?: ""
+                                            Card(
+                                                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.4f)),
+                                                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                Column(modifier = Modifier.padding(10.dp)) {
+                                                    Text(message, color = getTextColor(isDark), fontSize = 13.sp)
+                                                    Spacer(modifier = Modifier.height(4.dp))
+                                                    Text(timestamp, color = getTextColor(isDark).copy(alpha = 0.5f), fontSize = 11.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = { showNotificationsDialog = false },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ThemePrimary)
+                                ) {
+                                    Text("ĐÓNG", color = Color.White)
+                                }
+                            }
+                        )
+                    }
 
                     if (activeTab == 0) {
                         val isPrintLockedActive = isPrintLocked && (printLockedUntil == null || printLockedUntil!!.time > System.currentTimeMillis())
@@ -3953,118 +4004,159 @@ fun ChuyenPickView(
                             val targetPup = reportPupCode.trim().uppercase(Locale.ROOT)
                             isReporting = true
 
-                            // 1. Tìm thông tin người chuyển trong transfers
-                            db.collection("transfers").document(targetPup).get()
-                                .addOnSuccessListener { doc ->
-                                    if (!doc.exists()) {
-                                        isReporting = false
-                                        Toast.makeText(context, "Không tìm thấy thông tin chuyển cho mã PUP này!", Toast.LENGTH_LONG).show()
-                                    } else {
-                                        val reportedEmail = doc.getString("senderEmail") ?: ""
-                                        val reportedName = doc.getString("senderName") ?: ""
-                                        if (reportedEmail.isBlank()) {
-                                            isReporting = false
-                                            Toast.makeText(context, "Thông tin người gửi không hợp lệ!", Toast.LENGTH_SHORT).show()
-                                            return@addOnSuccessListener
-                                        }
-                                        if (reportedEmail == currentUserEmail) {
-                                            isReporting = false
-                                            Toast.makeText(context, "Bạn không thể tự tố cáo chính mình!", Toast.LENGTH_SHORT).show()
-                                            return@addOnSuccessListener
-                                        }
+                            // Call Google Sheets webAppUrl to verify transfer
+                            coroutineScope.launch(Dispatchers.IO) {
+                                try {
+                                    val client = okhttp3.OkHttpClient()
+                                    val bodyJson = JSONObject().apply {
+                                        put("action", "check_transfer")
+                                        put("pupCode", targetPup)
+                                        put("password", sharedPreferences.getString("sheet_password", "") ?: "")
+                                    }
+                                    val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                    val request = okhttp3.Request.Builder()
+                                        .url(webAppUrl)
+                                        .post(body)
+                                        .build()
 
-                                        // 2. Thêm tố cáo mới
-                                        val reporterName = if (currentUserRole == "Admin") {
-                                            currentUserName
-                                        } else {
-                                            val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
-                                            if (finalRiderRealName.isNotBlank()) "$finalRiderRealName ($currentRiderCode)" else "$currentUserName ($currentRiderCode)"
-                                        }
-
-                                        val reportId = "${reportedEmail}_${targetPup}_${System.currentTimeMillis()}"
-                                        val timestampStr = SimpleDateFormat("HH:mm:ss dd/MM/yyyy", Locale.getDefault()).format(Date())
-                                        val reportData = mapOf(
-                                            "pupCode" to targetPup,
-                                            "reporterEmail" to currentUserEmail,
-                                            "reporterName" to reporterName,
-                                            "reportedEmail" to reportedEmail,
-                                            "reportedName" to reportedName,
-                                            "timestamp" to timestampStr,
-                                            "timeMs" to System.currentTimeMillis()
-                                        )
-
-                                        db.collection("reports").document(reportId).set(reportData)
-                                            .addOnSuccessListener {
-                                                // 3. Tính toán hình phạt và khóa
-                                                db.collection("reports")
-                                                    .whereEqualTo("reportedEmail", reportedEmail)
-                                                    .get()
-                                                    .addOnSuccessListener { querySnapshot ->
-                                                        val allReports = querySnapshot.documents.mapNotNull { it.data }.sortedBy { it["timeMs"] as? Long ?: 0L }
-                                                        val nowMs = System.currentTimeMillis()
-                                                        val oneDayMs = 24 * 3600 * 1000L
-                                                        val oneWeekMs = 7 * 24 * 3600 * 1000L
-
-                                                        // Lọc tố cáo trong 24h qua và trong 7 ngày qua
-                                                        val reportsLast24h = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneDayMs }
-                                                        val reportsLast7d = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneWeekMs }
-
-                                                        var lockDurationMs = 0L
-                                                        var baseTimeMs = nowMs
-
-                                                        // Kiểm tra tuần (7 lần -> khóa 3 ngày)
-                                                        if (reportsLast7d.size >= 7) {
-                                                            lockDurationMs = 3 * 24 * 3600 * 1000L
-                                                            val thirdReportTime = reportsLast7d.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
-                                                            baseTimeMs = thirdReportTime
-                                                        }
-                                                        // Kiểm tra ngày (3 lần -> khóa 1 ngày)
-                                                        else if (reportsLast24h.size >= 3) {
-                                                            lockDurationMs = 24 * 3600 * 1000L
-                                                            val thirdReportTime = reportsLast24h.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
-                                                            baseTimeMs = thirdReportTime
+                                    client.newCall(request).execute().use { response ->
+                                        val responseBody = response.body?.string()
+                                        withContext(Dispatchers.Main) {
+                                            if (response.isSuccessful && responseBody != null) {
+                                                try {
+                                                    val respJson = JSONObject(responseBody)
+                                                    val statusVal = respJson.optString("status")
+                                                    if (statusVal == "success" || statusVal == "true" || respJson.optBoolean("status") == true) {
+                                                        // Found in Sheet!
+                                                        val reportedName = respJson.optString("senderName", "")
+                                                        val reportedEmail = respJson.optString("senderEmail", "")
+                                                        
+                                                        if (reportedEmail.isBlank()) {
+                                                            isReporting = false
+                                                            Toast.makeText(context, "Không xác định được email người đẩy pick!", Toast.LENGTH_SHORT).show()
+                                                            return@withContext
                                                         }
 
-                                                        if (lockDurationMs > 0L) {
-                                                            val lockUntilMs = baseTimeMs + lockDurationMs
-                                                            val lockUntilDate = Date(lockUntilMs)
+                                                        if (reportedEmail == currentUserEmail) {
+                                                            isReporting = false
+                                                            Toast.makeText(context, "Bạn không thể tự tố cáo chính mình!", Toast.LENGTH_SHORT).show()
+                                                            return@withContext
+                                                        }
 
-                                                            // Lấy danh sách thông tin tố cáo để lưu vào user
-                                                            val reportsListToStore = allReports.takeLast(7).map {
-                                                                mapOf(
-                                                                    "reporterName" to (it["reporterName"]?.toString() ?: ""),
-                                                                    "pupCode" to (it["pupCode"]?.toString() ?: ""),
-                                                                    "timestamp" to (it["timestamp"]?.toString() ?: "")
+                                                        // Add report to Firestore
+                                                        val reporterName = if (currentUserRole == "Admin") {
+                                                            currentUserName
+                                                        } else {
+                                                            val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+                                                            if (finalRiderRealName.isNotBlank()) "$finalRiderRealName ($currentRiderCode)" else "$currentUserName ($currentRiderCode)"
+                                                        }
+
+                                                        val reportId = "${reportedEmail}_${targetPup}_${System.currentTimeMillis()}"
+                                                        val timestampStr = SimpleDateFormat("HH:mm:ss dd/MM/yyyy", Locale.getDefault()).format(Date())
+                                                        val reportData = mapOf(
+                                                            "pupCode" to targetPup,
+                                                            "reporterEmail" to currentUserEmail,
+                                                            "reporterName" to reporterName,
+                                                            "reportedEmail" to reportedEmail,
+                                                            "reportedName" to reportedName,
+                                                            "timestamp" to timestampStr,
+                                                            "timeMs" to System.currentTimeMillis()
+                                                        )
+
+                                                        db.collection("reports").document(reportId).set(reportData)
+                                                            .addOnSuccessListener {
+                                                                // Send notification to the reported user
+                                                                val notifId = "NOTIF_${System.currentTimeMillis()}"
+                                                                val notifData = mapOf(
+                                                                    "id" to notifId,
+                                                                    "message" to "Bạn bị tố cáo đẩy sai mã PUP: $targetPup bởi $reporterName vào lúc $timestampStr",
+                                                                    "timestamp" to timestampStr,
+                                                                    "timeMs" to System.currentTimeMillis(),
+                                                                    "read" to false
                                                                 )
+                                                                db.collection("active_riders").document(reportedEmail)
+                                                                    .collection("notifications").document(notifId).set(notifData)
+
+                                                                // Apply Lock penalties
+                                                                db.collection("reports")
+                                                                    .whereEqualTo("reportedEmail", reportedEmail)
+                                                                    .get()
+                                                                    .addOnSuccessListener { querySnapshot ->
+                                                                        val allReports = querySnapshot.documents.mapNotNull { it.data }.sortedBy { it["timeMs"] as? Long ?: 0L }
+                                                                        val nowMs = System.currentTimeMillis()
+                                                                        val oneDayMs = 24 * 3600 * 1000L
+                                                                        val oneWeekMs = 7 * 24 * 3600 * 1000L
+
+                                                                        val reportsLast24h = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneDayMs }
+                                                                        val reportsLast7d = allReports.filter { nowMs - (it["timeMs"] as? Long ?: 0L) <= oneWeekMs }
+
+                                                                        var lockDurationMs = 0L
+                                                                        var baseTimeMs = nowMs
+
+                                                                        if (reportsLast7d.size >= 7) {
+                                                                            lockDurationMs = 3 * 24 * 3600 * 1000L
+                                                                            val thirdReportTime = reportsLast7d.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
+                                                                            baseTimeMs = thirdReportTime
+                                                                        } else if (reportsLast24h.size >= 3) {
+                                                                            lockDurationMs = 24 * 3600 * 1000L
+                                                                            val thirdReportTime = reportsLast24h.getOrNull(2)?.get("timeMs") as? Long ?: nowMs
+                                                                            baseTimeMs = thirdReportTime
+                                                                        }
+
+                                                                        if (lockDurationMs > 0L) {
+                                                                            val lockUntilMs = baseTimeMs + lockDurationMs
+                                                                            val lockUntilDate = Date(lockUntilMs)
+
+                                                                            val reportsListToStore = allReports.takeLast(7).map {
+                                                                                mapOf(
+                                                                                    "reporterName" to (it["reporterName"]?.toString() ?: ""),
+                                                                                    "pupCode" to (it["pupCode"]?.toString() ?: ""),
+                                                                                    "timestamp" to (it["timestamp"]?.toString() ?: "")
+                                                                                )
+                                                                            }
+
+                                                                            db.collection("active_riders").document(reportedEmail)
+                                                                                .update(mapOf(
+                                                                                    "isChuyenPickLocked" to true,
+                                                                                    "chuyenPickLockedUntil" to lockUntilDate,
+                                                                                    "reports" to reportsListToStore
+                                                                                ))
+                                                                        }
+
+                                                                        isReporting = false
+                                                                        reportPupCode = ""
+                                                                        Toast.makeText(context, "Đã tố cáo thành công người trước đó đẩy pick sai: $reportedName", Toast.LENGTH_LONG).show()
+                                                                    }
+                                                                    .addOnFailureListener {
+                                                                        isReporting = false
+                                                                        Toast.makeText(context, "Lỗi tính hình phạt: ${it.message}", Toast.LENGTH_SHORT).show()
+                                                                    }
                                                             }
-
-                                                            db.collection("active_riders").document(reportedEmail)
-                                                                .update(mapOf(
-                                                                    "isChuyenPickLocked" to true,
-                                                                    "chuyenPickLockedUntil" to lockUntilDate,
-                                                                    "reports" to reportsListToStore
-                                                                ))
-                                                        }
-
+                                                            .addOnFailureListener { e ->
+                                                                isReporting = false
+                                                                Toast.makeText(context, "Lỗi tạo tố cáo: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                            }
+                                                    } else {
                                                         isReporting = false
-                                                        reportPupCode = ""
-                                                        Toast.makeText(context, "Tố cáo thành công!", Toast.LENGTH_SHORT).show()
+                                                        Toast.makeText(context, "Rất tiếc không có ai từng chuyển pick cho bạn.", Toast.LENGTH_LONG).show()
                                                     }
-                                                    .addOnFailureListener {
-                                                        isReporting = false
-                                                        Toast.makeText(context, "Lỗi tính hình phạt: ${it.message}", Toast.LENGTH_SHORT).show()
-                                                    }
-                                            }
-                                            .addOnFailureListener { e ->
+                                                } catch (e: Exception) {
+                                                    isReporting = false
+                                                    Toast.makeText(context, "Lỗi phân tích phản hồi: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                }
+                                            } else {
                                                 isReporting = false
-                                                Toast.makeText(context, "Lỗi tạo tố cáo: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, "Rất tiếc không có ai từng chuyển pick cho bạn.", Toast.LENGTH_LONG).show()
                                             }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        isReporting = false
+                                        Toast.makeText(context, "Lỗi mạng: ${e.message}", Toast.LENGTH_SHORT).show()
                                     }
                                 }
-                                .addOnFailureListener { e ->
-                                    isReporting = false
-                                    Toast.makeText(context, "Lỗi truy vấn: ${e.message}", Toast.LENGTH_SHORT).show()
-                                }
+                            }
                         },
                         enabled = !isReporting,
                         modifier = Modifier.fillMaxWidth(),
