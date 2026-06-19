@@ -4433,19 +4433,6 @@ fun ChuyenPickView(
         // HỖ TRỢ ĐẨY PICK (HIỂN THỊ CHO RIDER, ADMIN KHÔNG CẦN PHẦN NÀY)
         if (currentUserRole != "Admin") {
             item {
-                var activeSupportList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
-
-                // Load active support pushes
-                LaunchedEffect(Unit) {
-                    db.collection("support_pushes")
-                        .orderBy("timeMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
-                        .addSnapshotListener { snap, err ->
-                            if (snap != null) {
-                                activeSupportList = snap.documents.mapNotNull { it.data }
-                            }
-                        }
-                }
-
                 GlassmorphicCard(
                     modifier = Modifier.fillMaxWidth(),
                     borderColor = getGlassBorderColor(isDark),
@@ -4460,21 +4447,6 @@ fun ChuyenPickView(
                             fontWeight = FontWeight.Bold,
                             color = ThemePrimary,
                             fontSize = 15.sp
-                        )
-
-                        OutlinedTextField(
-                            value = supportPup,
-                            onValueChange = { supportPup = it },
-                            placeholder = { Text("Nhập mã PUP cần hỗ trợ", color = getTextColor(isDark).copy(alpha = 0.6f)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = getTextColor(isDark),
-                                unfocusedTextColor = getTextColor(isDark),
-                                focusedBorderColor = ThemePrimary,
-                                unfocusedBorderColor = ThemePrimary.copy(alpha = 0.5f),
-                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
-                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
-                            )
                         )
 
                         // Button: Chọn ảnh hỗ trợ
@@ -4495,6 +4467,21 @@ fun ChuyenPickView(
                             Spacer(modifier = Modifier.width(8.dp))
                             Text("Chọn ảnh hỗ trợ", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
+
+                        OutlinedTextField(
+                            value = supportPup,
+                            onValueChange = { supportPup = it },
+                            placeholder = { Text("Nhập mã PUP cần hỗ trợ", color = getTextColor(isDark).copy(alpha = 0.6f)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = getTextColor(isDark),
+                                unfocusedTextColor = getTextColor(isDark),
+                                focusedBorderColor = ThemePrimary,
+                                unfocusedBorderColor = ThemePrimary.copy(alpha = 0.5f),
+                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.15f else 0.8f),
+                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = if (isDark) 0.25f else 0.95f)
+                            )
+                        )
 
                         OutlinedTextField(
                             value = supportAddress,
@@ -4527,20 +4514,58 @@ fun ChuyenPickView(
                                 val pCode = supportPup.trim().uppercase(Locale.ROOT)
                                 val docId = "${pCode}_${System.currentTimeMillis()}"
 
-                                db.collection("support_pushes").document(docId).set(mapOf(
-                                    "docId" to docId,
-                                    "pupCode" to pCode,
-                                    "receiver" to receiverStr,
-                                    "timeMs" to System.currentTimeMillis(),
-                                    "status" to "Pending"
-                                )).addOnSuccessListener {
-                                    isSupportSubmitting = false
-                                    supportPup = ""
-                                    supportAddress = ""
-                                    Toast.makeText(context, "Đã gửi yêu cầu hỗ trợ!", Toast.LENGTH_SHORT).show()
-                                }.addOnFailureListener {
-                                    isSupportSubmitting = false
-                                    Toast.makeText(context, "Lỗi: ${it.message}", Toast.LENGTH_SHORT).show()
+                                val emailToSend = currentUserEmail.ifBlank { sharedPreferences.getString("user_email", "") ?: "unregistered@gmail.com" }
+                                val nameToSend = currentUserName.ifBlank { sharedPreferences.getString("user_name", "") ?: "Unregistered" }
+                                val codeToSend = currentRiderCode.ifBlank { sharedPreferences.getString("rider_code", "") ?: "NONE" }
+                                val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+                                val formattedRiderName = if (finalRiderRealName.isNotBlank()) {
+                                    "$finalRiderRealName ( $codeToSend - $nameToSend )"
+                                } else {
+                                    "$nameToSend ( $codeToSend - $nameToSend )"
+                                }
+
+                                coroutineScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val client = okhttp3.OkHttpClient()
+                                        val timeString = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault()).format(Date())
+                                        val bodyJson = JSONObject().apply {
+                                            put("action", "gui_yeu_cau_ho_tro")
+                                            put("riderName", formattedRiderName)
+                                            put("pupCode", pCode)
+                                            put("timestamp", timeString)
+                                            put("status", "Đang chờ")
+                                            put("device", "Android App")
+                                            put("password", sharedPreferences.getString("sheet_password", "") ?: "")
+                                        }
+                                        val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                        val request = okhttp3.Request.Builder()
+                                            .url(webAppUrl)
+                                            .post(body)
+                                            .build()
+
+                                        client.newCall(request).execute().close()
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+
+                                    withContext(Dispatchers.Main) {
+                                        db.collection("support_pushes").document(docId).set(mapOf(
+                                            "docId" to docId,
+                                            "pupCode" to pCode,
+                                            "senderName" to formattedRiderName,
+                                            "receiver" to receiverStr,
+                                            "timeMs" to System.currentTimeMillis(),
+                                            "status" to "Pending"
+                                        )).addOnSuccessListener {
+                                            isSupportSubmitting = false
+                                            supportPup = ""
+                                            supportAddress = ""
+                                            Toast.makeText(context, "Đã gửi yêu cầu hỗ trợ!", Toast.LENGTH_SHORT).show()
+                                        }.addOnFailureListener {
+                                            isSupportSubmitting = false
+                                            Toast.makeText(context, "Lỗi: ${it.message}", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
                                 }
                             },
                             enabled = !isSupportSubmitting,
@@ -4550,14 +4575,48 @@ fun ChuyenPickView(
                         ) {
                             Text("GỬI YÊU CẦU", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
                         }
+                    }
+                }
+            }
+        }
 
-                        if (activeSupportList.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text("Danh sách yêu cầu hỗ trợ:", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
+        // DANH SÁCH YÊU CẦU HỖ TRỢ (CHỈ HIỂN THỊ CHO ADMIN)
+        if (currentUserRole == "Admin") {
+            item {
+                var activeSupportList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+
+                // Load active support pushes
+                LaunchedEffect(Unit) {
+                    db.collection("support_pushes")
+                        .orderBy("timeMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
+                        .addSnapshotListener { snap, err ->
+                            if (snap != null) {
+                                activeSupportList = snap.documents.mapNotNull { it.data }
+                            }
+                        }
+                }
+
+                if (activeSupportList.isNotEmpty()) {
+                    GlassmorphicCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        borderColor = getGlassBorderColor(isDark),
+                        glowColor = ThemeCyan
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                "Danh sách yêu cầu hỗ trợ:",
+                                fontWeight = FontWeight.Bold,
+                                color = getTextColor(isDark),
+                                fontSize = 13.sp
+                            )
 
                             activeSupportList.forEach { item ->
                                 val dId = item["docId"]?.toString() ?: ""
                                 val p = item["pupCode"]?.toString() ?: ""
+                                val sender = item["senderName"]?.toString() ?: "Rider ẩn danh"
                                 val rec = item["receiver"]?.toString() ?: ""
                                 val status = item["status"]?.toString() ?: "Pending"
 
@@ -4566,78 +4625,148 @@ fun ChuyenPickView(
                                     border = BorderStroke(1.dp, getGlassBorderColor(isDark).copy(alpha = 0.5f)),
                                     colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f))
                                 ) {
-                                    Row(
+                                    Column(
                                         modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
+                                        Column {
                                             Text("PUP: $p", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
+                                            Text("Gửi bởi: $sender", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
                                             Text("Gửi tới: $rec", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
                                             Text("Trạng thái: $status", color = if (status == "Pushed") Color.Green else ThemeAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                                         }
+
                                         if (status == "Pending") {
                                             var isPushingSupport by remember { mutableStateOf(false) }
-                                            Premium3DButton(
-                                                onClick = {
-                                                    isPushingSupport = true
-                                                    coroutineScope.launch(Dispatchers.IO) {
-                                                        try {
-                                                            val client = okhttp3.OkHttpClient()
-                                                            val timeString = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault()).format(Date())
-                                                            val bodyJson = JSONObject().apply {
-                                                                put("action", "chuyen_pick")
-                                                                put("riderName", "$currentUserName (Admin Support)")
-                                                                put("pupCode", p)
-                                                                put("receiverRider", rec)
-                                                                put("timestamp", timeString)
-                                                                put("password", sharedPreferences.getString("sheet_password", "") ?: "")
-                                                            }
-                                                            val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
-                                                            val request = okhttp3.Request.Builder()
-                                                                .url(webAppUrl)
-                                                                .post(body)
-                                                                .build()
+                                            var selectedDriverForThisCard by remember { mutableStateOf("") }
+                                            var dropdownExpanded by remember { mutableStateOf(false) }
 
-                                                            client.newCall(request).execute().use { response ->
-                                                                val responseBody = response.body?.string()
-                                                                withContext(Dispatchers.Main) {
-                                                                    isPushingSupport = false
-                                                                    if (response.isSuccessful && responseBody != null) {
-                                                                        db.collection("support_pushes").document(dId)
-                                                                            .update("status", "Pushed")
-
-                                                                        db.collection("transfers").document(p).set(mapOf(
-                                                                            "pupCode" to p,
-                                                                            "senderEmail" to currentUserEmail,
-                                                                            "senderName" to "$currentUserName (Admin Support)",
-                                                                            "receiverRider" to rec,
-                                                                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                                                                        ))
-
-                                                                        Toast.makeText(context, "Hỗ trợ đẩy thành công!", Toast.LENGTH_SHORT).show()
-                                                                    } else {
-                                                                        Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Nút chọn Rider nhận
+                                                Box(modifier = Modifier.weight(1f)) {
+                                                    OutlinedButton(
+                                                        onClick = { dropdownExpanded = true },
+                                                        modifier = Modifier.fillMaxWidth().height(38.dp),
+                                                        colors = ButtonDefaults.outlinedButtonColors(
+                                                            contentColor = getTextColor(isDark)
+                                                        ),
+                                                        border = BorderStroke(1.dp, ThemePrimary.copy(alpha = 0.5f)),
+                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                                                    ) {
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        ) {
+                                                            Text(
+                                                                text = selectedDriverForThisCard.ifBlank { "Chọn Rider" },
+                                                                fontSize = 11.sp,
+                                                                maxLines = 1,
+                                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                modifier = Modifier.weight(1f)
+                                                            )
+                                                            Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        }
+                                                    }
+                                                    DropdownMenu(
+                                                        expanded = dropdownExpanded,
+                                                        onDismissRequest = { dropdownExpanded = false },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth(0.65f)
+                                                            .heightIn(max = 250.dp)
+                                                            .background(if (isDark) Color(0xFFCCCCCC) else Color(0xFFE2E4EB))
+                                                    ) {
+                                                        if (driversList.isEmpty()) {
+                                                            DropdownMenuItem(
+                                                                text = { Text("Không có Rider", color = Color.Black, fontSize = 12.sp) },
+                                                                onClick = {}
+                                                            )
+                                                        } else {
+                                                            driversList.forEach { driver ->
+                                                                val dName = driver["name"]?.toString() ?: ""
+                                                                val dCode = driver["code"]?.toString() ?: ""
+                                                                DropdownMenuItem(
+                                                                    text = { Text("$dName - $dCode", color = Color.Black, fontSize = 12.sp) },
+                                                                    onClick = {
+                                                                        selectedDriverForThisCard = "$dName - $dCode"
+                                                                        dropdownExpanded = false
                                                                     }
-                                                                }
-                                                            }
-                                                        } catch (e: Exception) {
-                                                            withContext(Dispatchers.Main) {
-                                                                isPushingSupport = false
-                                                                Toast.makeText(context, "Lỗi mạng: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                                )
                                                             }
                                                         }
                                                     }
-                                                },
-                                                enabled = !isPushingSupport,
-                                                modifier = Modifier.width(90.dp).height(38.dp),
-                                                containerColor = ThemePrimary,
-                                                shadowColor = ThemePrimary.copy(alpha = 0.4f)
-                                            ) {
-                                                if (isPushingSupport) {
-                                                    CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(16.dp))
-                                                } else {
-                                                    Text("Chuyển", color = getButtonTextColor(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                }
+
+                                                Premium3DButton(
+                                                    onClick = {
+                                                        if (selectedDriverForThisCard.isBlank()) {
+                                                            Toast.makeText(context, "Vui lòng chọn Rider nhận!", Toast.LENGTH_SHORT).show()
+                                                            return@Premium3DButton
+                                                        }
+                                                        isPushingSupport = true
+                                                        coroutineScope.launch(Dispatchers.IO) {
+                                                            try {
+                                                                val client = okhttp3.OkHttpClient()
+                                                                val timeString = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault()).format(Date())
+                                                                val bodyJson = JSONObject().apply {
+                                                                    put("action", "admin_chuyen_ho_tro")
+                                                                    put("riderName", sender)
+                                                                    put("pupCode", p)
+                                                                    put("receiverRider", selectedDriverForThisCard)
+                                                                    put("timestamp", timeString)
+                                                                    put("device", "Android App")
+                                                                    put("password", sharedPreferences.getString("sheet_password", "") ?: "")
+                                                                }
+                                                                val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                                                                val request = okhttp3.Request.Builder()
+                                                                    .url(webAppUrl)
+                                                                    .post(body)
+                                                                    .build()
+
+                                                                client.newCall(request).execute().use { response ->
+                                                                    val responseBody = response.body?.string()
+                                                                    withContext(Dispatchers.Main) {
+                                                                        isPushingSupport = false
+                                                                        if (response.isSuccessful && responseBody != null) {
+                                                                            db.collection("support_pushes").document(dId)
+                                                                                .update("status", "Pushed")
+
+                                                                            db.collection("transfers").document(p).set(mapOf(
+                                                                                "pupCode" to p,
+                                                                                "senderEmail" to currentUserEmail,
+                                                                                "senderName" to "$currentUserName (Admin Support)",
+                                                                                "receiverRider" to selectedDriverForThisCard,
+                                                                                "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                                                            ))
+
+                                                                            Toast.makeText(context, "Hỗ trợ chuyển thành công!", Toast.LENGTH_SHORT).show()
+                                                                        } else {
+                                                                            Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                    }
+                                                                }
+                                                            } catch (e: Exception) {
+                                                                withContext(Dispatchers.Main) {
+                                                                    isPushingSupport = false
+                                                                    Toast.makeText(context, "Lỗi mạng: ${e.message}", Toast.LENGTH_SHORT).show()
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    enabled = !isPushingSupport,
+                                                    modifier = Modifier.width(90.dp).height(38.dp),
+                                                    containerBrush = getButtonGradientBrush(isDark),
+                                                    shadowColor = ThemePrimary.copy(alpha = 0.4f)
+                                                ) {
+                                                    if (isPushingSupport) {
+                                                        CircularProgressIndicator(color = getButtonTextColor(), modifier = Modifier.size(16.dp))
+                                                    } else {
+                                                        Text("Chuyển", color = getButtonTextColor(), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    }
                                                 }
                                             }
                                         }
@@ -4649,7 +4778,7 @@ fun ChuyenPickView(
                 }
         }
     }
-    }
+}
 }
 
 fun getRemainingTimeText(untilDate: Date?, isLocked: Boolean): String {
