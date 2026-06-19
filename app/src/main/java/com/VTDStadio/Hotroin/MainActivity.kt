@@ -1820,7 +1820,7 @@ fun ShopeeAutoPrintApp(
                         Spacer(modifier = Modifier.height(12.dp))
                         Text("CAM KẾT BẢO MẬT THÔNG TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
                         Spacer(modifier = Modifier.height(6.dp))
-                        Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển khoản và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
+                        Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển pick và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
                     }
                 },
                 confirmButton = {
@@ -5337,7 +5337,7 @@ fun AppInfoSettingsSection(isDark: Boolean) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("CAM KẾT BẢO MẬT THÔNG TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển khoản và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
+                    Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển pick và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
                 }
             },
             confirmButton = {
