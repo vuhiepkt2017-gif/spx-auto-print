@@ -8,6 +8,12 @@
     <!-- Quyền Rung để phản hồi khi quét thành công -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Quyền hiển thị thông báo Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Quyền chạy dịch vụ chạy nền (Foreground Service) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
@@ -33,6 +39,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Khai báo Foreground Service cho thông báo đẩy -->
+        <service
+            android:name="com.VTDStadio.Hotroin.BackgroundNotificationService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>
