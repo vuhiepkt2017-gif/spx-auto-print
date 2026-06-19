@@ -1,8 +1,18 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.gms.google-services")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        load(FileInputStream(file))
+    }
 }
 
 android {
@@ -22,10 +32,19 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(localProperties.getProperty("signing.storeFilePath") ?: "spx-auto-print-key.jks")
+            storePassword = localProperties.getProperty("signing.storePassword") ?: ""
+            keyAlias = localProperties.getProperty("signing.keyAlias") ?: ""
+            keyPassword = localProperties.getProperty("signing.keyPassword") ?: ""
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
