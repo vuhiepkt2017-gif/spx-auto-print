@@ -814,6 +814,22 @@ fun ShopeeAutoPrintApp(
     var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
     val db = remember { FirebaseFirestore.getInstance() }
 
+    fun triggerVibration() {
+        try {
+            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
+                } else {
+                    @Suppress("DEPRECATION")
+                    vibrator.vibrate(100)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("ShopeeAutoPrint", "Lỗi rung", e)
+        }
+    }
+
     fun updateHistoryList(newList: List<PrintHistoryItem>) {
         historyList = newList
         if (currentUserEmail.isNotBlank()) {
@@ -898,6 +914,83 @@ fun ShopeeAutoPrintApp(
         val cleaned = cleanOldHistoryIfNeeded(currentUserRole, historyList)
         if (cleaned.size != historyList.size) {
             updateHistoryList(cleaned)
+        }
+    }
+
+    // Periodic check for error codes from Google Sheet WebApp
+    LaunchedEffect(currentUserEmail, webAppUrl) {
+        if (currentUserEmail.isBlank() || webAppUrl.isBlank()) return@LaunchedEffect
+        while (true) {
+            try {
+                val emailToSend = currentUserEmail.ifBlank { sharedPreferences.getString("user_email", "") ?: "unregistered@gmail.com" }
+                val nameToSend = currentUserName.ifBlank { sharedPreferences.getString("user_name", "") ?: "Unregistered" }
+                val codeToSend = currentRiderCode.ifBlank { sharedPreferences.getString("rider_code", "") ?: "NONE" }
+                val finalRiderRealName = sharedPreferences.getString("rider_real_name", "") ?: currentRiderRealName
+                val formattedRiderName = if (currentUserRole == "Admin") {
+                    nameToSend
+                } else if (finalRiderRealName.isNotBlank()) {
+                    "$finalRiderRealName ( $codeToSend - $nameToSend )"
+                } else {
+                    "$nameToSend ( $codeToSend - $nameToSend )"
+                }
+                val passToSend = sheetPassword.ifBlank { sharedPreferences.getString("sheet_password", "") ?: "NOPASSWORD" }
+
+                val bodyJson = JSONObject().apply {
+                    put("action", "get_errors")
+                    put("email", emailToSend)
+                    put("riderName", formattedRiderName)
+                    put("riderCode", codeToSend)
+                    put("password", passToSend)
+                }
+
+                val body = bodyJson.toString().toRequestBody("application/json; charset=utf-8".toMediaType())
+                val request = Request.Builder()
+                    .url(webAppUrl)
+                    .post(body)
+                    .build()
+
+                val client = OkHttpClient()
+                withContext(Dispatchers.IO) {
+                    client.newCall(request).execute().use { response ->
+                        if (response.isSuccessful) {
+                            val responseBody = response.body?.string()
+                            if (responseBody != null) {
+                                val respJson = JSONObject(responseBody)
+                                val statusVal = respJson.optString("status")
+                                if (statusVal == "success") {
+                                    val errArray = respJson.optJSONArray("errorCodes")
+                                    if (errArray != null && errArray.length() > 0) {
+                                        val errList = mutableListOf<String>()
+                                        for (i in 0 until errArray.length()) {
+                                            errList.add(errArray.getString(i).uppercase(Locale.ROOT))
+                                        }
+
+                                        withContext(Dispatchers.Main) {
+                                            var historyChanged = false
+                                            val updatedHistory = historyList.map { item ->
+                                                val cleanItemCode = item.code.uppercase(Locale.ROOT)
+                                                if (errList.contains(cleanItemCode) && !item.status.contains("lỗi") && !item.status.contains("Lỗi") && !item.status.contains("Thất bại")) {
+                                                    historyChanged = true
+                                                    triggerVibration()
+                                                    item.copy(status = "Mã lỗi", errorMessage = "Gặp lỗi in trên Sheet")
+                                                } else {
+                                                    item
+                                                }
+                                            }
+                                            if (historyChanged) {
+                                                updateHistoryList(updatedHistory)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ShopeeAutoPrint", "Error fetching error codes: ${e.message}")
+            }
+            delay(15000) // Poll every 15 seconds
         }
     }
 
@@ -1016,21 +1109,7 @@ fun ShopeeAutoPrintApp(
         }
     }
 
-    fun triggerVibration() {
-        try {
-            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
-            if (vibrator != null && vibrator.hasVibrator()) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createOneShot(100, VibrationEffect.DEFAULT_AMPLITUDE))
-                } else {
-                    @Suppress("DEPRECATION")
-                    vibrator.vibrate(100)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("ShopeeAutoPrint", "Lỗi rung", e)
-        }
-    }
+    
 
     fun sendPrintRequest(codeToSend: String) {
         if (codeToSend.isBlank()) {
@@ -1577,6 +1656,7 @@ fun ShopeeAutoPrintApp(
                                                         val statusColor = when {
                                                             item.status.contains("thành công") || item.status.contains("Thành công") -> Color(0xFF4CAF50)
                                                             item.status.contains("Đang") -> Color(0xFFFF9800)
+                                                            item.status.contains("lỗi") || item.status.contains("Lỗi") || item.status.contains("Thất bại") -> Color(0xFFE57373)
                                                             else -> ThemePrimary
                                                         }
                                                         Box(
