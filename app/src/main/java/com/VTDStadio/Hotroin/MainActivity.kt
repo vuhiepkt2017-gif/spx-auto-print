@@ -814,6 +814,10 @@ fun ShopeeAutoPrintApp(
     var historyList by remember { mutableStateOf(listOf<PrintHistoryItem>()) }
     val db = remember { FirebaseFirestore.getInstance() }
 
+    var lastPrintTime by remember { mutableStateOf(0L) }
+    var isPollingActive by remember { mutableStateOf(false) }
+    var notifiedErrors by remember { mutableStateOf(setOf<String>()) }
+
     fun triggerVibration() {
         try {
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator?
@@ -918,9 +922,14 @@ fun ShopeeAutoPrintApp(
     }
 
     // Periodic check for error codes from Google Sheet WebApp
-    LaunchedEffect(currentUserEmail, webAppUrl) {
+    LaunchedEffect(currentUserEmail, webAppUrl, isPollingActive) {
         if (currentUserEmail.isBlank() || webAppUrl.isBlank()) return@LaunchedEffect
         while (true) {
+            // Auto timeout fast polling after 2 minutes (120 seconds) of inactivity
+            if (isPollingActive && (System.currentTimeMillis() - lastPrintTime > 120000L)) {
+                isPollingActive = false
+            }
+
             try {
                 val emailToSend = currentUserEmail.ifBlank { sharedPreferences.getString("user_email", "") ?: "unregistered@gmail.com" }
                 val nameToSend = currentUserName.ifBlank { sharedPreferences.getString("user_name", "") ?: "Unregistered" }
@@ -967,17 +976,28 @@ fun ShopeeAutoPrintApp(
 
                                         withContext(Dispatchers.Main) {
                                             var historyChanged = false
+                                            val newNotified = notifiedErrors.toMutableSet()
                                             val updatedHistory = historyList.map { item ->
                                                 val cleanItemCode = item.code.uppercase(Locale.ROOT)
-                                                if (errList.contains(cleanItemCode) && !item.status.contains("lỗi") && !item.status.contains("Lỗi") && !item.status.contains("Thất bại")) {
-                                                    historyChanged = true
-                                                    triggerVibration()
-                                                    item.copy(status = "Mã lỗi", errorMessage = "Gặp lỗi in trên Sheet")
+                                                if (errList.contains(cleanItemCode)) {
+                                                    val hasNotified = newNotified.contains(cleanItemCode)
+                                                    if (!hasNotified && !item.status.contains("lỗi") && !item.status.contains("Lỗi") && !item.status.contains("Thất bại")) {
+                                                        historyChanged = true
+                                                        triggerVibration()
+                                                        newNotified.add(cleanItemCode)
+                                                        item.copy(status = "Mã lỗi", errorMessage = "Gặp lỗi in trên Sheet")
+                                                    } else if (item.status != "Mã lỗi") {
+                                                        historyChanged = true
+                                                        item.copy(status = "Mã lỗi", errorMessage = "Gặp lỗi in trên Sheet")
+                                                    } else {
+                                                        item
+                                                    }
                                                 } else {
                                                     item
                                                 }
                                             }
                                             if (historyChanged) {
+                                                notifiedErrors = newNotified
                                                 updateHistoryList(updatedHistory)
                                             }
                                         }
@@ -990,7 +1010,10 @@ fun ShopeeAutoPrintApp(
             } catch (e: Exception) {
                 Log.e("ShopeeAutoPrint", "Error fetching error codes: ${e.message}")
             }
-            delay(15000) // Poll every 15 seconds
+            
+            // If active, poll fast (every 3 seconds). If idle, poll very slowly (every 45 seconds) to prevent overload.
+            val waitTime = if (isPollingActive) 3000L else 45000L
+            delay(waitTime)
         }
     }
 
@@ -1125,6 +1148,10 @@ fun ShopeeAutoPrintApp(
 
         isSending = true
         statusText = "Đang truyền dữ liệu..."
+        
+        // Kích hoạt quét lỗi nhanh khi vừa nhấn nút gửi in
+        lastPrintTime = System.currentTimeMillis()
+        isPollingActive = true
 
         val sdf = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault())
         val timeString = sdf.format(Date())
