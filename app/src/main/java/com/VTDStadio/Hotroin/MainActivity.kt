@@ -69,6 +69,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -141,10 +142,12 @@ fun getButtonTextColor(): Color = if (LocalThemeIsDark.current) Color(0xFF0C0D24
 
 @Composable
 fun getButtonGradientBrush(isDark: Boolean): Brush {
+    val startColor = if (isDark) Color(0xFFC5B8FF) else Color(0xFF8575F9)
+    val endColor = if (isDark) Color(0xFFFFD1E3) else Color(0xFFEA8BCB)
     return Brush.linearGradient(
         listOf(
-            ThemePrimary,
-            ThemeAccent
+            startColor,
+            endColor
         )
     )
 }
@@ -2463,29 +2466,22 @@ fun LoginScreen(
             verticalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            // Premium Icon Logo Circle
-            Box(
+            // Premium App Logo
+            androidx.compose.foundation.Image(
+                painter = androidx.compose.ui.res.painterResource(id = com.VTDStadio.Hotroin.R.drawable.app_logo),
+                contentDescription = "Logo",
                 modifier = Modifier
                     .size(90.dp)
-                    .clip(CircleShape)
-                    .background(ThemePrimary.copy(alpha = 0.1f))
+                    .clip(RoundedCornerShape(20.dp))
                     .border(
-                        2.dp,
+                        1.5.dp,
                         Brush.linearGradient(listOf(ThemePrimary, ThemeCyan)),
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Print,
-                    contentDescription = "Logo",
-                    modifier = Modifier.size(45.dp),
-                    tint = ThemePrimary
-                )
-            }
+                        RoundedCornerShape(20.dp)
+                    )
+            )
 
             Text(
-                "HỖ TRỢ IN HÀNG LOẠT",
+                "HỖ TRỢ VẬN HÀNH",
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
                 color = getTextColor(isDark),
