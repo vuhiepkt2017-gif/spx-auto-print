@@ -2,6 +2,7 @@ package com.VTDStadio.Hotroin
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -34,6 +35,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -135,6 +138,16 @@ fun getTextColor(isDark: Boolean): Color = if (isDark) TextLightColor else TextD
 
 @Composable
 fun getButtonTextColor(): Color = if (LocalThemeIsDark.current) Color(0xFF0C0D24) else Color.White
+
+@Composable
+fun getButtonGradientBrush(isDark: Boolean): Brush {
+    return Brush.linearGradient(
+        listOf(
+            ThemePrimary,
+            ThemeAccent
+        )
+    )
+}
 
 fun getThemeBgBrush(isDark: Boolean): Brush {
     return if (isDark) {
@@ -445,6 +458,16 @@ class MainActivity : ComponentActivity() {
         sharedPreferences = getSharedPreferences("ShopeeAutoPrintPrefs", Context.MODE_PRIVATE)
         cameraExecutor = Executors.newSingleThreadExecutor()
 
+        val isLoggedInVal = sharedPreferences.getBoolean("is_logged_in", false)
+        if (isLoggedInVal) {
+            val serviceIntent = Intent(this, BackgroundNotificationService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(serviceIntent)
+            } else {
+                startService(serviceIntent)
+            }
+        }
+
         setContent {
             var isDark by remember { mutableStateOf(sharedPreferences.getBoolean("is_dark_theme", true)) }
             CompositionLocalProvider(LocalThemeIsDark provides isDark) {
@@ -603,6 +626,9 @@ fun ShopeeAutoPrintApp(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
         )
     }
+
+    var showAppInfoDialog by remember { mutableStateOf(false) }
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
 
     // Checking for previous crash details
     var crashTrace by remember { 
@@ -974,6 +1000,8 @@ fun ShopeeAutoPrintApp(
             putString("rider_real_name", "")
             apply()
         }
+        val serviceIntent = Intent(context, BackgroundNotificationService::class.java)
+        context.stopService(serviceIntent)
         coroutineScope.launch(Dispatchers.IO) {
             try {
                 val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -1153,6 +1181,13 @@ fun ShopeeAutoPrintApp(
                     putString("rider_code", rCode)
                     putString("rider_real_name", rRealName)
                     apply()
+                }
+
+                val serviceIntent = Intent(context, BackgroundNotificationService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(serviceIntent)
+                } else {
+                    context.startService(serviceIntent)
                 }
             }
         )
@@ -1463,10 +1498,11 @@ fun ShopeeAutoPrintApp(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(64.dp),
-                                    containerBrush = Brush.linearGradient(
-                                        colors = if (isSending) listOf(Color.Gray.copy(alpha = 0.5f), Color.DarkGray.copy(alpha = 0.5f))
-                                        else listOf(ThemePrimary.copy(alpha = 0.85f), ThemeAccent.copy(alpha = 0.85f))
-                                    ),
+                                    containerBrush = if (isSending) {
+                                        Brush.linearGradient(listOf(Color.Gray.copy(alpha = 0.5f), Color.DarkGray.copy(alpha = 0.5f)))
+                                    } else {
+                                        getButtonGradientBrush(isDark)
+                                    },
                                     shadowColor = if (isSending) Color.DarkGray else ThemeAccent.copy(alpha = 0.5f)
                                 ) {
                                     if (isSending) {
@@ -1633,6 +1669,53 @@ fun ShopeeAutoPrintApp(
                     }
                 }
             }
+        if (showAppInfoDialog) {
+            AlertDialog(
+                onDismissRequest = { showAppInfoDialog = false },
+                title = { Text("Thông tin ứng dụng", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column {
+                        Text("Tên ứng dụng: Hỗ trợ vận hành", color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Phiên bản: 1.0.0", color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Ngày phát hành: 2026", color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Nhà phát triển: VTD Stadio", color = getTextColor(isDark))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showAppInfoDialog = false }) {
+                        Text("ĐÓNG", color = ThemePrimary)
+                    }
+                },
+                containerColor = getThemeSurfaceColor(isDark)
+            )
+        }
+
+        if (showPrivacyPolicyDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyPolicyDialog = false },
+                title = { Text("Chính sách bảo mật", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                        Text("ĐIỀU KHOẢN SỬ DỤNG DỊCH VỤ", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Chào mừng bạn đến với ứng dụng Hỗ trợ vận hành. Khi sử dụng ứng dụng này, bạn đồng ý tuân thủ các điều khoản dịch vụ của chúng tôi.", color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("CAM KẾT BẢO MẬT THÔNG TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển khoản và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrivacyPolicyDialog = false }) {
+                        Text("ĐỒNG Ý", color = ThemePrimary)
+                    }
+                },
+                containerColor = getThemeSurfaceColor(isDark)
+            )
+        }
         }
     }
 }
@@ -1645,9 +1728,11 @@ fun UserAccountView(
     onLogout: () -> Unit
 ) {
     val isDark = LocalThemeIsDark.current
+    val scrollState = rememberScrollState()
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(scrollState)
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Top
@@ -1695,6 +1780,8 @@ fun UserAccountView(
                 }
             }
         }
+        Spacer(modifier = Modifier.height(16.dp))
+        AppInfoSettingsSection(isDark = isDark)
     }
 }
 
@@ -1786,7 +1873,7 @@ fun AdminDashboardView(
             tabs.forEachIndexed { index, title ->
                 val isSelected = selectedSubTab == index
                 val backgroundBrush = if (isSelected) {
-                    Brush.linearGradient(listOf(ThemePrimary, ThemeAccent))
+                    getButtonGradientBrush(isDark)
                 } else {
                     Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                 }
@@ -1877,6 +1964,9 @@ fun AdminDashboardView(
                             }
                         }
                     }
+                }
+                item {
+                    AppInfoSettingsSection(isDark = isDark)
                 }
             } else if (selectedSubTab == 1) {
                 item {
@@ -1970,7 +2060,7 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = ThemePrimary,
+                containerBrush = getButtonGradientBrush(isDark),
                 shadowColor = ThemePrimary.copy(alpha = 0.5f)
             ) {
                 if (isProcessing) {
@@ -2353,7 +2443,7 @@ fun LoginScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(58.dp),
-                                containerBrush = Brush.linearGradient(listOf(ThemePrimary, ThemeAccent)),
+                                containerBrush = getButtonGradientBrush(isDark),
                                 shadowColor = ThemeAccent.copy(alpha = 0.5f)
                             ) {
                                 Icon(Icons.Default.Login, contentDescription = "Login", tint = getButtonTextColor())
@@ -2831,7 +2921,7 @@ fun BadgeItem(text: String, isDark: Boolean) {
         Text(
             text = text,
             color = if (isDark) ThemeCyan else Color(0xFF00838F),
-            fontSize = 11.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
     }
@@ -3113,10 +3203,10 @@ fun TopBarLogo(isDark: Boolean) {
                 val r1Y = yBase + 12.dp.toPx()
                 
                 // Centered coordinates for HỖ TRỢ VẬN HÀNH
-                // Spacing w*0.42, w*0.60, w*0.78
-                drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
+                // Spacing w*0.38, w*0.60, w*0.82
+                drawFuturisticText("TRỢ", w * 0.38f, yBase, 1.0f, 1)
                 drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
+                drawFuturisticText("HÀNH", w * 0.82f, yBase, 1.0f, 3)
 
                 // Carrying "HỖ" on head - lowered y-offset down to r1Y - 17.dp.toPx()
                 drawFuturisticText("HỖ", r1X, r1Y - 17.dp.toPx(), 1.0f, 0)
@@ -3128,9 +3218,9 @@ fun TopBarLogo(isDark: Boolean) {
                 val r1X = w * 0.16f
                 val r1Y = yBase + 12.dp.toPx()
                 
-                drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
+                drawFuturisticText("TRỢ", w * 0.38f, yBase, 1.0f, 1)
                 drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
+                drawFuturisticText("HÀNH", w * 0.82f, yBase, 1.0f, 3)
 
                 // "HỖ" flying up & fading
                 val flyY = (r1Y - 17.dp.toPx()) - (t * 80.dp.toPx())
@@ -3142,19 +3232,19 @@ fun TopBarLogo(isDark: Boolean) {
                 // Phase 3: Robot 1 walks to "TRỢ" and kicks it to the right off-screen
                 val t = stateTime - 6.0f
                 val startR1X = w * 0.16f
-                val endR1X = w * 0.38f // stops just left of TRỢ (w * 0.42) to kick
+                val endR1X = w * 0.34f // stops just left of TRỢ (w * 0.38) to kick
                 val r1X = startR1X + (endR1X - startR1X) * (t / 1.5f).coerceIn(0f, 1f)
                 val r1Y = yBase + 12.dp.toPx()
 
                 drawFuturisticText("VẬN", w * 0.60f, yBase, 1.0f, 2)
-                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
+                drawFuturisticText("HÀNH", w * 0.82f, yBase, 1.0f, 3)
 
                 // "TRỢ" flies off if kick has happened (let's say kick at t > 0.8s)
                 if (t < 0.8f) {
-                    drawFuturisticText("TRỢ", w * 0.42f, yBase, 1.0f, 1)
+                    drawFuturisticText("TRỢ", w * 0.38f, yBase, 1.0f, 1)
                 } else {
                     val kickProgress = ((t - 0.8f) / 0.7f).coerceIn(0f, 1f)
-                    val troX = w * 0.42f + kickProgress * w * 0.8f
+                    val troX = w * 0.38f + kickProgress * w * 0.8f
                     val troY = yBase - (java.lang.Math.sin(kickProgress * Math.PI).toFloat() * 15.dp.toPx())
                     val troOpacity = (1.0f - kickProgress).coerceIn(0f, 1f)
                     drawFuturisticText("TRỢ", troX, troY, troOpacity, 1)
@@ -3172,7 +3262,7 @@ fun TopBarLogo(isDark: Boolean) {
                 val jumpProgress = (t / 1.5f).coerceIn(0f, 1f)
                 val r1Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(jumpProgress * Math.PI).toFloat() * 20.dp.toPx())
 
-                drawFuturisticText("HÀNH", w * 0.78f, yBase, 1.0f, 3)
+                drawFuturisticText("HÀNH", w * 0.82f, yBase, 1.0f, 3)
 
                 // VẬN behavior: breaks and sinks on land (land happens at jumpProgress > 0.8s)
                 if (jumpProgress < 0.8f) {
@@ -3193,17 +3283,17 @@ fun TopBarLogo(isDark: Boolean) {
                 
                 // Robot runs right, grabs HÀNH at w * 0.88f, drags it left to w * 0.22f
                 val r1X = if (walkProgress < 0.4f) {
-                    w * 0.64f + (w * 0.24f * (walkProgress / 0.4f))
+                    w * 0.64f + (w * 0.26f * (walkProgress / 0.4f)) // walks to grab point w*0.90
                 } else {
-                    w * 0.88f - (w * 0.66f * ((walkProgress - 0.4f) / 0.6f))
+                    w * 0.90f - (w * 0.72f * ((walkProgress - 0.4f) / 0.6f)) // drags to w*0.18
                 }
                 val r1Y = yBase + 12.dp.toPx()
 
                 // "HÀNH" position
                 val hanhX = if (walkProgress < 0.4f) {
-                    w * 0.78f
+                    w * 0.82f
                 } else {
-                    w * 0.78f - (w * 0.56f * ((walkProgress - 0.4f) / 0.6f))
+                    w * 0.82f - (w * 0.64f * ((walkProgress - 0.4f) / 0.6f)) // drags HÀNH to w*0.18
                 }
                 drawFuturisticText("HÀNH", hanhX, yBase, 1.0f, 3)
                 drawRobot1(r1X, r1Y, false, 0f)
@@ -3217,7 +3307,7 @@ fun TopBarLogo(isDark: Boolean) {
                 val r1Y: Float
                 if (progress < 0.4f) {
                     val runProg = progress / 0.4f
-                    r1X = w * 0.22f + (w * 0.28f * runProg)
+                    r1X = w * 0.18f + (w * 0.32f * runProg)
                     r1Y = yBase + 12.dp.toPx()
                 } else if (progress < 0.7f) {
                     val jumpProg = (progress - 0.4f) / 0.3f
@@ -3228,7 +3318,7 @@ fun TopBarLogo(isDark: Boolean) {
                     r1Y = yBase + 12.dp.toPx()
                 }
 
-                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
 
                 // "LÀ" drops from top after Robot 1 jumps and pulls it at progress > 0.7
                 if (progress > 0.7f) {
@@ -3243,21 +3333,21 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 12.5f
                 val walkProgress = (t / 2.0f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
                 drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
 
                 val r1X = if (walkProgress < 0.5f) {
                     w * 0.50f + (w * 0.46f * (walkProgress / 0.5f)) // walks all the way to w*0.96
                 } else {
-                    w * 0.96f - (w * 0.18f * ((walkProgress - 0.5f) / 0.5f)) // drags to w*0.78
+                    w * 0.96f - (w * 0.14f * ((walkProgress - 0.5f) / 0.5f)) // drags to w*0.82
                 }
                 val r1Y = yBase + 12.dp.toPx()
 
-                // "CHÍNH" dragged from w * 1.0f to w * 0.78f
+                // "CHÍNH" dragged from w * 1.0f to w * 0.82f
                 val chinX = if (walkProgress < 0.5f) {
                     w * 1.0f
                 } else {
-                    w * 1.0f - (w * 0.22f * ((walkProgress - 0.5f) / 0.5f))
+                    w * 1.0f - (w * 0.18f * ((walkProgress - 0.5f) / 0.5f))
                 }
                 drawFuturisticText("CHÍNH", chinX, yBase, 1.0f, 0)
                 drawRobot1(r1X, r1Y, false, 0f)
@@ -3267,9 +3357,9 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 14.5f
                 val enterProgress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
                 drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
-                drawFuturisticText("CHÍNH", w * 0.78f, yBase, 1.0f, 0)
+                drawFuturisticText("CHÍNH", w * 0.82f, yBase, 1.0f, 0)
 
                 val r2X: Float
                 val hammerProgress: Float
@@ -3277,39 +3367,39 @@ fun TopBarLogo(isDark: Boolean) {
 
                 if (enterProgress < 0.6f) {
                     val walkProg = enterProgress / 0.6f
-                    r2X = w * 1.0f - (w * 0.14f * walkProg) // walks from w*1.0 to w*0.86
+                    r2X = w * 1.0f - (w * 0.10f * walkProg) // walks from w*1.0 to w*0.90
                     hammerProgress = 0f
                     isR1KnockedOut = false
                 } else {
                     val swingProg = (enterProgress - 0.6f) / 0.4f
-                    r2X = w * 0.86f
+                    r2X = w * 0.90f
                     hammerProgress = swingProg
                     isR1KnockedOut = swingProg > 0.8f // Robot 1 only falls after hammer hit
                 }
 
                 val r2Y = yBase + 12.dp.toPx()
 
-                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), isR1KnockedOut, 0f)
+                drawRobot1(w * 0.82f, yBase + 12.dp.toPx(), isR1KnockedOut, 0f)
                 drawRobot2(r2X, r2Y, hammerProgress)
 
             } else if (stateTime in 16.0f..17.5f) {
-                // Phase 9: Robot 2 walks to w * 0.82f (close to CHÍNH) and kicks it, holds hammer up (1.0f)
+                // Phase 9: Robot 2 walks to w * 0.86f (close to CHÍNH) and kicks it, holds hammer up (1.0f)
                 val t = stateTime - 16.0f
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
                 drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
 
                 val r2X: Float
                 if (progress < 0.4f) {
                     val walkProg = progress / 0.4f
-                    r2X = w * 0.86f - (w * 0.04f * walkProg) // walks close to w*0.82
-                    drawFuturisticText("CHÍNH", w * 0.78f, yBase, 1.0f, 0)
+                    r2X = w * 0.90f - (w * 0.04f * walkProg) // walks close to w*0.86
+                    drawFuturisticText("CHÍNH", w * 0.82f, yBase, 1.0f, 0)
                 } else {
                     val kickProg = (progress - 0.4f) / 0.6f
-                    r2X = w * 0.82f
+                    r2X = w * 0.86f
                     // CHÍNH flies right and disappears
-                    val chinX = w * 0.78f + kickProg * w * 0.6f
+                    val chinX = w * 0.82f + kickProg * w * 0.6f
                     val chinY = yBase - (java.lang.Math.sin(kickProg * Math.PI).toFloat() * 12.dp.toPx())
                     val chinOpacity = (1.0f - kickProg).coerceIn(0f, 1f)
                     drawFuturisticText("CHÍNH", chinX, chinY, chinOpacity, 0)
@@ -3317,7 +3407,7 @@ fun TopBarLogo(isDark: Boolean) {
 
                 val r2Y = yBase + 12.dp.toPx()
                 // Robot 1 is knocked out on floor
-                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true, 0f)
+                drawRobot1(w * 0.82f, yBase + 12.dp.toPx(), true, 0f)
                 drawRobot2(r2X, r2Y, 1.0f)
 
             } else if (stateTime in 17.5f..19.0f) {
@@ -3325,12 +3415,12 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 17.5f
                 val progress = (t / 1.5f).coerceIn(0f, 1f)
 
-                drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
 
                 val r2X: Float
                 if (progress < 0.5f) {
                     val walkProg = progress / 0.5f
-                    r2X = w * 0.82f - (w * 0.28f * walkProg) // walks close to w*0.54
+                    r2X = w * 0.86f - (w * 0.32f * walkProg) // walks close to w*0.54
                     drawFuturisticText("LÀ", w * 0.50f, yBase, 1.0f, 0)
                 } else {
                     val kickProg = (progress - 0.5f) / 0.5f
@@ -3342,7 +3432,7 @@ fun TopBarLogo(isDark: Boolean) {
                 }
 
                 val r2Y = yBase + 12.dp.toPx()
-                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true, 0f)
+                drawRobot1(w * 0.82f, yBase + 12.dp.toPx(), true, 0f)
                 drawRobot2(r2X, r2Y, 1.0f)
 
             } else if (stateTime in 19.0f..20.0f) {
@@ -3350,28 +3440,28 @@ fun TopBarLogo(isDark: Boolean) {
                 val t = stateTime - 19.0f
                 val progress = (t / 1.0f).coerceIn(0f, 1f)
 
-                // Jump arc of Robot 2 (lands on HÀNH at w * 0.22f)
-                val r2X = w * 0.54f - (w * 0.32f * progress)
+                // Jump arc of Robot 2 (lands on HÀNH at w * 0.18f)
+                val r2X = w * 0.54f - (w * 0.36f * progress)
                 val r2Y = (yBase + 12.dp.toPx()) - (java.lang.Math.sin(progress * Math.PI).toFloat() * 16.dp.toPx())
 
                 // "HÀNH" sinks when Robot 2 lands (progress > 0.8)
                 if (progress < 0.8f) {
-                    drawFuturisticText("HÀNH", w * 0.22f, yBase, 1.0f, 0)
+                    drawFuturisticText("HÀNH", w * 0.18f, yBase, 1.0f, 0)
                 } else {
                     val sinkProgress = ((progress - 0.8f) / 0.2f).coerceIn(0f, 1f)
                     val hanhOpacity = (1.0f - sinkProgress).coerceIn(0f, 1f)
-                    drawFuturisticText("HÀNH", w * 0.22f, yBase + sinkProgress * 40.dp.toPx(), hanhOpacity, 0)
+                    drawFuturisticText("HÀNH", w * 0.18f, yBase + sinkProgress * 40.dp.toPx(), hanhOpacity, 0)
                 }
 
-                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true, 0f)
+                drawRobot1(w * 0.82f, yBase + 12.dp.toPx(), true, 0f)
                 drawRobot2(r2X, r2Y, 1.0f)
 
             } else if (stateTime in 20.0f..21.5f) {
                 // Phase 12: Robot 2 stands on top of HÀNH (removed sinking animation), holds hammer up (1.0f)
-                val r2X = w * 0.22f
+                val r2X = w * 0.18f
                 val r2Y = yBase + 12.dp.toPx()
 
-                drawRobot1(w * 0.78f, yBase + 12.dp.toPx(), true, 0f)
+                drawRobot1(w * 0.82f, yBase + 12.dp.toPx(), true, 0f)
                 drawRobot2(r2X, r2Y, 1.0f)
 
             } else if (stateTime in 21.5f..22.5f) {
@@ -3437,11 +3527,11 @@ fun SplashScreen(isDark: Boolean, onFinished: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 // Glow circles around the app logo
-                Canvas(modifier = Modifier.size(200.dp)) {
+                Canvas(modifier = Modifier.size(240.dp)) {
                     val r = size.width / 2
                     val center = Offset(r, r)
                     val dotRadius = 4.dp.toPx()
-                    val orbitalRadius = r - 12.dp.toPx()
+                    val orbitalRadius = r - 10.dp.toPx()
                     
                     for (i in 0 until 8) {
                         val currentAngle = (angle + i * 45) * (Math.PI / 180f)
@@ -3460,8 +3550,8 @@ fun SplashScreen(isDark: Boolean, onFinished: () -> Unit) {
                     painter = androidx.compose.ui.res.painterResource(id = com.VTDStadio.Hotroin.R.drawable.app_logo),
                     contentDescription = "Logo",
                     modifier = Modifier
-                        .size(110.dp)
-                        .clip(RoundedCornerShape(20.dp))
+                        .size(150.dp)
+                        .clip(RoundedCornerShape(30.dp))
                 )
             }
             
@@ -3596,7 +3686,7 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                 },
                 enabled = !isProcessing,
                 modifier = Modifier.fillMaxWidth(),
-                containerColor = ThemePrimary,
+                containerBrush = getButtonGradientBrush(isDark),
                 shadowColor = ThemeAccent.copy(alpha = 0.5f)
             ) {
                 Text("Thêm Rider Nhận", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
@@ -3755,7 +3845,7 @@ fun ChuyenPickView(
                             ocrPhotoLauncher.launch("image/*")
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        containerBrush = Brush.linearGradient(listOf(ThemePrimary.copy(alpha = 0.8f), ThemeAccent.copy(alpha = 0.8f))),
+                        containerBrush = getButtonGradientBrush(isDark),
                         shadowColor = ThemePrimary.copy(alpha = 0.4f)
                     ) {
                         Icon3D(
@@ -3953,7 +4043,7 @@ fun ChuyenPickView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(58.dp),
-                        containerBrush = Brush.linearGradient(listOf(ThemePrimary, ThemeAccent)),
+                        containerBrush = getButtonGradientBrush(isDark),
                         shadowColor = ThemeAccent.copy(alpha = 0.5f)
                     ) {
                         if (isSending) {
@@ -4353,7 +4443,7 @@ fun ChuyenPickView(
                             },
                             enabled = !isSupportSubmitting,
                             modifier = Modifier.fillMaxWidth(),
-                            containerColor = ThemePrimary,
+                            containerBrush = getButtonGradientBrush(isDark),
                             shadowColor = ThemeAccent.copy(alpha = 0.5f)
                         ) {
                             Text("GỬI YÊU CẦU", color = getButtonTextColor(), fontWeight = FontWeight.Bold)
@@ -4851,6 +4941,166 @@ fun ChuyenPickLockedScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun AppInfoSettingsSection(isDark: Boolean) {
+    var showBugReportDialog by remember { mutableStateOf(false) }
+    var showIntroDialog by remember { mutableStateOf(false) }
+    var showVersionDialog by remember { mutableStateOf(false) }
+    var showPrivacyDialog by remember { mutableStateOf(false) }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.3f)),
+        border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Cấu hình & Thông tin ứng dụng", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Item 1: Góp ý, báo lỗi
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showBugReportDialog = true }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Feedback, contentDescription = "Góp ý", tint = ThemePrimary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Góp ý, báo lỗi", color = getTextColor(isDark), fontSize = 14.sp)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = getTextColor(isDark).copy(alpha = 0.5f))
+            }
+
+            HorizontalDivider(color = getGlassBorderColor(isDark).copy(alpha = 0.5f), thickness = 1.dp)
+
+            // Item 2: Giới thiệu
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showIntroDialog = true }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = "Giới thiệu", tint = ThemePrimary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Giới thiệu", color = getTextColor(isDark), fontSize = 14.sp)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = getTextColor(isDark).copy(alpha = 0.5f))
+            }
+
+            HorizontalDivider(color = getGlassBorderColor(isDark).copy(alpha = 0.5f), thickness = 1.dp)
+
+            // Item 3: Phiên bản
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showVersionDialog = true }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.NewReleases, contentDescription = "Phiên bản", tint = ThemePrimary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Phiên bản", color = getTextColor(isDark), fontSize = 14.sp)
+                }
+                Text("1.0.0", color = getTextColor(isDark).copy(alpha = 0.6f), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            }
+
+            HorizontalDivider(color = getGlassBorderColor(isDark).copy(alpha = 0.5f), thickness = 1.dp)
+
+            // Item 4: Chính sách quyền riêng tư và bảo mật
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showPrivacyDialog = true }
+                    .padding(vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Security, contentDescription = "Bảo mật", tint = ThemePrimary, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text("Chính sách quyền riêng tư và bảo mật", color = getTextColor(isDark), fontSize = 14.sp)
+                }
+                Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = getTextColor(isDark).copy(alpha = 0.5f))
+            }
+        }
+    }
+
+    // Dialogs
+    if (showBugReportDialog) {
+        AlertDialog(
+            onDismissRequest = { showBugReportDialog = false },
+            title = { Text("Góp ý, báo lỗi", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Mọi góp ý báo lỗi vui lòng liên hệ Leader của bạn", color = getTextColor(isDark)) },
+            confirmButton = {
+                TextButton(onClick = { showBugReportDialog = false }) {
+                    Text("ĐỒNG Ý", color = ThemePrimary)
+                }
+            },
+            containerColor = getThemeSurfaceColor(isDark)
+        )
+    }
+
+    if (showIntroDialog) {
+        AlertDialog(
+            onDismissRequest = { showIntroDialog = false },
+            title = { Text("Giới thiệu", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Hỗ Trợ Vận Hành, được thiết kế bởi VTDStadio và dùng để hỗ trợ inbill, chuyển pick nhanh", color = getTextColor(isDark)) },
+            confirmButton = {
+                TextButton(onClick = { showIntroDialog = false }) {
+                    Text("ĐÓNG", color = ThemePrimary)
+                }
+            },
+            containerColor = getThemeSurfaceColor(isDark)
+        )
+    }
+
+    if (showVersionDialog) {
+        AlertDialog(
+            onDismissRequest = { showVersionDialog = false },
+            title = { Text("Phiên bản", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+            text = { Text("Phiên bản hiện tại: 1.0.0", color = getTextColor(isDark)) },
+            confirmButton = {
+                TextButton(onClick = { showVersionDialog = false }) {
+                    Text("ĐÓNG", color = ThemePrimary)
+                }
+            },
+            containerColor = getThemeSurfaceColor(isDark)
+        )
+    }
+
+    if (showPrivacyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyDialog = false },
+            title = { Text("Chính sách quyền riêng tư và bảo mật", color = ThemePrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState())) {
+                    Text("ĐIỀU KHOẢN SỬ DỤNG DỊCH VỤ", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Chào mừng bạn đến với ứng dụng Hỗ trợ vận hành. Khi sử dụng ứng dụng này, bạn đồng ý tuân thủ các điều khoản dịch vụ của chúng tôi.", color = getTextColor(isDark))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("CAM KẾT BẢO MẬT THÔNG TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark))
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text("Chúng tôi cam kết bảo mật tuyệt đối mọi thông tin cá nhân, lịch sử chuyển khoản và in ấn của bạn. Tất cả dữ liệu được lưu trữ an toàn bằng công nghệ cơ sở dữ liệu đám mây tiên tiến bảo mật cao. Chúng tôi không bao giờ chia sẻ dữ liệu của bạn cho bất kỳ bên thứ ba nào khi chưa được phép.", color = getTextColor(isDark))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyDialog = false }) {
+                    Text("ĐỒNG Ý", color = ThemePrimary)
+                }
+            },
+            containerColor = getThemeSurfaceColor(isDark)
+        )
     }
 }
 
