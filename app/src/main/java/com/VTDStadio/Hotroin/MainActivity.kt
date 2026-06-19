@@ -2416,6 +2416,25 @@ fun LoginScreen(
                                             isLoading = false
                                             onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN", "Admin")
                                         }
+                                } else if (userEmail == "tester@gmail.com" || userEmail.contains("tester")) {
+                                    // Tester bypassed directly without rider code
+                                    db.collection("active_riders").document(userEmail)
+                                        .set(mapOf(
+                                            "email" to userEmail,
+                                            "name" to userName,
+                                            "role" to "Rider",
+                                            "riderCode" to "TESTER",
+                                            "riderRealName" to "Tester",
+                                            "lastActive" to Date()
+                                        ))
+                                        .addOnSuccessListener {
+                                            isLoading = false
+                                            onLoginSuccess(userEmail, userName, "Rider", true, "TESTER", "Tester")
+                                        }
+                                        .addOnFailureListener { e ->
+                                            isLoading = false
+                                            onLoginSuccess(userEmail, userName, "Rider", true, "TESTER", "Tester")
+                                        }
                                 } else {
                                     // Normal user: Check if already registered
                                     db.collection("active_riders").document(userEmail).get()
