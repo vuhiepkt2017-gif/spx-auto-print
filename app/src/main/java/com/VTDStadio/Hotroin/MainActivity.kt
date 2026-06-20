@@ -1570,6 +1570,16 @@ fun ShopeeAutoPrintApp(
                                     .padding(16.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                Text(
+                                    "XỬ LÝ IN BILL",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 20.sp,
+                                    color = ThemePrimary,
+                                    letterSpacing = 1.sp,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+
                                 AnimatedVisibility(visible = statusText.isNotEmpty()) {
                                     Card(
                                         colors = CardDefaults.cardColors(
