@@ -1643,7 +1643,7 @@ fun ShopeeAutoPrintApp(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Text("LỊCH SỬ GỬI TIN", fontWeight = FontWeight.Bold, color = getTextColor(isDark).copy(alpha = 0.6f), fontSize = 14.sp)
+                                    Text("LỊCH SỬ GỬI IN", fontWeight = FontWeight.Bold, color = getTextColor(isDark).copy(alpha = 0.6f), fontSize = 14.sp)
                                     if (historyList.isNotEmpty() && currentUserRole == "Admin") {
                                         Text(
                                             "XÓA HẾT",
@@ -1709,6 +1709,27 @@ fun ShopeeAutoPrintApp(
                                                             fontSize = 13.sp,
                                                             fontWeight = FontWeight.Medium
                                                         )
+                                                        Spacer(modifier = Modifier.width(8.dp))
+                                                        IconButton(
+                                                            onClick = {
+                                                                try {
+                                                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                                                    val clip = android.content.ClipData.newPlainText("Mã gửi in", item.code)
+                                                                    clipboard.setPrimaryClip(clip)
+                                                                    Toast.makeText(context, "Đã sao chép mã!", Toast.LENGTH_SHORT).show()
+                                                                } catch (e: Exception) {
+                                                                    Log.e("ShopeeAutoPrint", "Lỗi sao chép mã", e)
+                                                                }
+                                                            },
+                                                            modifier = Modifier.size(24.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.ContentCopy,
+                                                                contentDescription = "Sao chép mã",
+                                                                tint = getTextColor(isDark).copy(alpha = 0.6f),
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
