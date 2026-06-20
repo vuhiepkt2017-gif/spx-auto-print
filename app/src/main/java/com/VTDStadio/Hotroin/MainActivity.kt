@@ -4020,7 +4020,7 @@ fun ChuyenPickView(
     ) {
         item {
             Text(
-                "CHUYỂN PICK NHIỆM VỤ",
+                "XỬ LÝ PICK",
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = 20.sp,
                 color = ThemePrimary,
