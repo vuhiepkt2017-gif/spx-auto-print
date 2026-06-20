@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
@@ -507,42 +508,38 @@ fun AIParticleBackground() {
     val glow2 = if (isDark) Color(0xFFFFB8D1).copy(alpha = 0.12f) else Color(0xFFFFE3EE).copy(alpha = 0.5f)
     val glow3 = if (isDark) Color(0xFF80DEEA).copy(alpha = 0.12f) else Color(0xFFE0F7FA).copy(alpha = 0.5f)
 
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val w = size.width
-        val h = size.height
-        if (w == 0f || h == 0f) return@Canvas
-
-        // 1. Draw soft radial glow spots (Gemini/AI style)
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(glow1, Color.Transparent),
-                center = Offset(w * 0.1f, h * 0.1f),
-                radius = w * 0.8f
-            ),
-            radius = w * 0.8f,
-            center = Offset(w * 0.1f, h * 0.1f)
-        )
-
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(glow2, Color.Transparent),
-                center = Offset(w * 0.9f, h * 0.8f),
-                radius = w * 0.7f
-            ),
-            radius = w * 0.7f,
-            center = Offset(w * 0.9f, h * 0.8f)
-        )
-
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(glow3, Color.Transparent),
-                center = Offset(w * 0.5f, h * 0.5f),
-                radius = w * 0.6f
-            ),
-            radius = w * 0.6f,
-            center = Offset(w * 0.5f, h * 0.5f)
-        )
-    }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithCache {
+                val w = size.width
+                val h = size.height
+                if (w == 0f || h == 0f) {
+                    onDrawBehind {}
+                } else {
+                    val brush1 = Brush.radialGradient(
+                        colors = listOf(glow1, Color.Transparent),
+                        center = Offset(w * 0.1f, h * 0.1f),
+                        radius = w * 0.8f
+                    )
+                    val brush2 = Brush.radialGradient(
+                        colors = listOf(glow2, Color.Transparent),
+                        center = Offset(w * 0.9f, h * 0.8f),
+                        radius = w * 0.7f
+                    )
+                    val brush3 = Brush.radialGradient(
+                        colors = listOf(glow3, Color.Transparent),
+                        center = Offset(w * 0.5f, h * 0.5f),
+                        radius = w * 0.6f
+                    )
+                    onDrawBehind {
+                        drawCircle(brush = brush1, radius = w * 0.8f, center = Offset(w * 0.1f, h * 0.1f))
+                        drawCircle(brush = brush2, radius = w * 0.7f, center = Offset(w * 0.9f, h * 0.8f))
+                        drawCircle(brush = brush3, radius = w * 0.6f, center = Offset(w * 0.5f, h * 0.5f))
+                    }
+                }
+            }
+    )
 }
 
 @Composable
