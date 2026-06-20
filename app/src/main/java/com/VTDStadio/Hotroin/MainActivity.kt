@@ -441,6 +441,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraExecutor: ExecutorService
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
         
         // Uncaught Exception Handler
@@ -2494,6 +2495,7 @@ fun LoginScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(getThemeBgBrush(isDark))
+            .systemBarsPadding()
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
