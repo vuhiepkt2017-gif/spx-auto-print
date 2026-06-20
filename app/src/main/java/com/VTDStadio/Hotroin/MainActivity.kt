@@ -1167,7 +1167,8 @@ fun ShopeeAutoPrintApp(
         val sdf = SimpleDateFormat("HH:mm:ss dd/MM", Locale.getDefault())
         val timeString = sdf.format(Date())
 
-        val newItems = cleanCodes.map { PrintHistoryItem(it, timeString, "Đang truyền...") }
+        val batchCodesText = cleanCodes.joinToString("\n")
+        val newItems = listOf(PrintHistoryItem(batchCodesText, timeString, "Đang truyền..."))
         updateHistoryList(cleanOldHistoryIfNeeded(currentUserRole, newItems + historyList))
 
         // Ensure we fetch latest values from sharedPreferences directly in case state is out of sync
@@ -1222,7 +1223,7 @@ fun ShopeeAutoPrintApp(
                                 if (statusVal == "success" || statusVal == "true" || respJson.optBoolean("status") == true) {
                                     statusText = "Gửi in thành công ${cleanCodes.size} mã!"
                                     updateHistoryList(historyList.map { item ->
-                                        if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
+                                        if (item.code == batchCodesText && item.status.contains("Đang")) {
                                             item.copy(status = "Thành công")
                                         } else {
                                             item
@@ -1232,7 +1233,7 @@ fun ShopeeAutoPrintApp(
                                 } else {
                                     statusText = "Thất bại: $messageVal"
                                     updateHistoryList(historyList.map { item ->
-                                        if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
+                                        if (item.code == batchCodesText && item.status.contains("Đang")) {
                                             item.copy(status = "Thất bại", errorMessage = messageVal)
                                         } else {
                                             item
@@ -1242,7 +1243,7 @@ fun ShopeeAutoPrintApp(
                             } catch (e: Exception) {
                                 statusText = "Thất bại: Lỗi định dạng phản hồi từ Google Sheets"
                                 updateHistoryList(historyList.map { item ->
-                                    if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
+                                    if (item.code == batchCodesText && item.status.contains("Đang")) {
                                         item.copy(status = "Thất bại", errorMessage = e.message)
                                     } else {
                                         item
@@ -1252,7 +1253,7 @@ fun ShopeeAutoPrintApp(
                         } else {
                             statusText = "Thất bại: Mã phản hồi HTTP ${response.code}"
                             updateHistoryList(historyList.map { item ->
-                                if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
+                                if (item.code == batchCodesText && item.status.contains("Đang")) {
                                     item.copy(status = "Thất bại", errorMessage = "HTTP ${response.code}")
                                 } else {
                                     item
@@ -1266,7 +1267,7 @@ fun ShopeeAutoPrintApp(
                     isSending = false
                     statusText = "Thất bại: ${e.message}"
                     updateHistoryList(historyList.map { item ->
-                        if (cleanCodes.contains(item.code) && item.status.contains("Đang")) {
+                        if (item.code == batchCodesText && item.status.contains("Đang")) {
                             item.copy(status = "Thất bại", errorMessage = e.message)
                         } else {
                             item
