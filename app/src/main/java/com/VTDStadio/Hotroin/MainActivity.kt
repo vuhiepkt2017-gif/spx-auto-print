@@ -1450,41 +1450,112 @@ fun ShopeeAutoPrintApp(
                     AIParticleBackground()
 
                     if (showNotificationsDialog) {
-                        AlertDialog(
-                            onDismissRequest = { showNotificationsDialog = false },
-                            title = { Text("Thông báo lỗi đẩy sai", color = ThemePrimary, fontWeight = FontWeight.Bold) },
-                            text = {
-                                if (userNotifications.isEmpty()) {
-                                    Text("Bạn không có thông báo nào.", color = getTextColor(isDark))
-                                } else {
-                                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        items(userNotifications) { notif ->
-                                            val message = notif["message"]?.toString() ?: ""
-                                            val timestamp = notif["timestamp"]?.toString() ?: ""
-                                            Card(
-                                                colors = CardDefaults.cardColors(containerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.4f)),
-                                                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
-                                                modifier = Modifier.fillMaxWidth()
+                        val combinedNotifications = remember(userNotifications, notifiedErrors) {
+                            val sheetNotifs = notifiedErrors.map { code ->
+                                mapOf(
+                                    "message" to "Đơn hàng $code gặp lỗi in trên Google Sheets. Vui lòng kiểm tra lại!",
+                                    "timestamp" to "Lỗi in Sheet",
+                                    "isSheetError" to true
+                                )
+                            }
+                            sheetNotifs + userNotifications
+                        }
+
+                        androidx.compose.ui.window.Dialog(onDismissRequest = { showNotificationsDialog = false }) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                shape = RoundedCornerShape(24.dp),
+                                border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(
+                                            if (isDark) {
+                                                Brush.verticalGradient(listOf(Color(0xFF131133), Color(0xFF0B0A1F)))
+                                            } else {
+                                                Brush.verticalGradient(listOf(Color(0xFFF0EFFF), Color(0xFFE3DCFF)))
+                                            }
+                                        )
+                                        .padding(20.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    ) {
+                                        Text(
+                                            "THÔNG BÁO HỆ THỐNG",
+                                            color = ThemePrimary,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+
+                                        if (combinedNotifications.isEmpty()) {
+                                            Text(
+                                                "Bạn không có thông báo nào.",
+                                                color = getTextColor(isDark).copy(alpha = 0.6f),
+                                                fontSize = 13.sp,
+                                                modifier = Modifier.padding(vertical = 12.dp)
+                                            )
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxWidth().heightIn(max = 350.dp),
+                                                verticalArrangement = Arrangement.spacedBy(8.dp)
                                             ) {
-                                                Column(modifier = Modifier.padding(10.dp)) {
-                                                    Text(message, color = getTextColor(isDark), fontSize = 13.sp)
-                                                    Spacer(modifier = Modifier.height(4.dp))
-                                                    Text(timestamp, color = getTextColor(isDark).copy(alpha = 0.5f), fontSize = 11.sp)
+                                                items(combinedNotifications) { notif ->
+                                                    val message = notif["message"]?.toString() ?: ""
+                                                    val timestamp = notif["timestamp"]?.toString() ?: ""
+                                                    val isSheetError = notif["isSheetError"] as? Boolean ?: false
+
+                                                    Card(
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isSheetError) {
+                                                                Color(0xFFB71C1C).copy(alpha = 0.15f)
+                                                            } else {
+                                                                getThemeSurfaceColor(isDark).copy(alpha = 0.3f)
+                                                            }
+                                                        ),
+                                                        border = BorderStroke(
+                                                            1.dp,
+                                                            if (isSheetError) Color(0xFFB71C1C).copy(alpha = 0.4f)
+                                                            else getGlassBorderColor(isDark)
+                                                        ),
+                                                        modifier = Modifier.fillMaxWidth()
+                                                    ) {
+                                                        Column(modifier = Modifier.padding(12.dp)) {
+                                                            Text(message, color = getTextColor(isDark), fontSize = 13.sp)
+                                                            Spacer(modifier = Modifier.height(4.dp))
+                                                            Text(
+                                                                timestamp,
+                                                                color = if (isSheetError) Color(0xFFE57373)
+                                                                else getTextColor(isDark).copy(alpha = 0.5f),
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Medium
+                                                            )
+                                                        }
+                                                    }
                                                 }
+                                            }
+                                        }
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.End
+                                        ) {
+                                            TextButton(
+                                                onClick = { showNotificationsDialog = false },
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                            ) {
+                                                Text("ĐÓNG", color = ThemePrimary, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
                                 }
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = { showNotificationsDialog = false },
-                                    colors = ButtonDefaults.buttonColors(containerColor = ThemePrimary)
-                                ) {
-                                    Text("ĐÓNG", color = Color.White)
-                                }
                             }
-                        )
+                        }
                     }
 
                     if (activeTab == 0) {
