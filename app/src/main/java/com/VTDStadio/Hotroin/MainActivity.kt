@@ -42,6 +42,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -4159,75 +4160,111 @@ fun ChuyenPickView(
                         )
                         if (expanded) {
                             var searchDriverQueryDialog by remember { mutableStateOf("") }
-                            AlertDialog(
-                                onDismissRequest = { expanded = false },
-                                title = { Text("Chọn Rider nhận", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        OutlinedTextField(
-                                            value = searchDriverQueryDialog,
-                                            onValueChange = { searchDriverQueryDialog = it },
-                                            placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            singleLine = true,
-                                            colors = OutlinedTextFieldDefaults.colors(
-                                                focusedTextColor = getTextColor(isDark),
-                                                unfocusedTextColor = getTextColor(isDark),
-                                                focusedBorderColor = ThemePrimary,
-                                                unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f),
-                                                unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f),
-                                                focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.15f)
-                                            )
-                                        )
-
-                                        val filteredDrivers = driversList
-                                            .filter { it["isOutHub"] as? Boolean != true }
-                                            .filter { driver ->
-                                                val name = driver["name"]?.toString() ?: ""
-                                                val code = driver["code"]?.toString() ?: ""
-                                                name.contains(searchDriverQueryDialog, ignoreCase = true) || code.contains(searchDriverQueryDialog, ignoreCase = true)
-                                            }
-
-                                        LazyColumn(
-                                            modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            if (filteredDrivers.isEmpty()) {
-                                                item {
-                                                    Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
+                            androidx.compose.ui.window.Dialog(onDismissRequest = { expanded = false }) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp),
+                                    shape = RoundedCornerShape(24.dp),
+                                    border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(
+                                                if (isDark) {
+                                                    Brush.verticalGradient(listOf(Color(0xFF131133), Color(0xFF0B0A1F)))
+                                                } else {
+                                                    Brush.verticalGradient(listOf(Color(0xFFF0EFFF), Color(0xFFE3DCFF)))
                                                 }
-                                            } else {
-                                                items(filteredDrivers) { driver ->
-                                                    val dName = driver["name"]?.toString() ?: ""
-                                                    val dCode = driver["code"]?.toString() ?: ""
-                                                    Card(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                selectedDriver = "$dName - $dCode"
-                                                                expanded = false
-                                                            },
-                                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                                                    ) {
-                                                        Column(modifier = Modifier.padding(12.dp)) {
-                                                            Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
+                                            )
+                                            .padding(20.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                        ) {
+                                            Text(
+                                                "Chọn Rider nhận",
+                                                color = ThemePrimary,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp
+                                            )
+
+                                            OutlinedTextField(
+                                                value = searchDriverQueryDialog,
+                                                onValueChange = { searchDriverQueryDialog = it },
+                                                placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                singleLine = true,
+                                                colors = OutlinedTextFieldDefaults.colors(
+                                                    focusedTextColor = getTextColor(isDark),
+                                                    unfocusedTextColor = getTextColor(isDark),
+                                                    focusedBorderColor = ThemePrimary,
+                                                    unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f),
+                                                    unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f),
+                                                    focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.15f)
+                                                )
+                                            )
+
+                                            val filteredDrivers = driversList
+                                                .filter { it["isOutHub"] as? Boolean != true }
+                                                .filter { driver ->
+                                                    val name = driver["name"]?.toString() ?: ""
+                                                    val code = driver["code"]?.toString() ?: ""
+                                                    name.contains(searchDriverQueryDialog, ignoreCase = true) || code.contains(searchDriverQueryDialog, ignoreCase = true)
+                                                }
+
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                                            ) {
+                                                if (filteredDrivers.isEmpty()) {
+                                                    item {
+                                                        Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
+                                                    }
+                                                } else {
+                                                    itemsIndexed(filteredDrivers) { index, driver ->
+                                                        val dName = driver["name"]?.toString() ?: ""
+                                                        val dCode = driver["code"]?.toString() ?: ""
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clickable {
+                                                                    selectedDriver = "$dName - $dCode"
+                                                                    expanded = false
+                                                                }
+                                                                .padding(vertical = 10.dp, horizontal = 4.dp)
+                                                        ) {
+                                                            Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                                        }
+                                                        if (index < filteredDrivers.lastIndex) {
+                                                            HorizontalDivider(
+                                                                color = getTextColor(isDark).copy(alpha = 0.08f),
+                                                                thickness = 0.8.dp,
+                                                                modifier = Modifier.padding(horizontal = 4.dp)
+                                                            )
                                                         }
                                                     }
                                                 }
                                             }
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End
+                                            ) {
+                                                TextButton(
+                                                    onClick = { expanded = false },
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("ĐÓNG", color = ThemePrimary, fontWeight = FontWeight.Bold)
+                                                }
+                                            }
                                         }
                                     }
-                                },
-                                confirmButton = {
-                                    TextButton(onClick = { expanded = false }) {
-                                        Text("ĐÓNG", color = ThemePrimary)
-                                    }
-                                },
-                                containerColor = getThemeSurfaceColor(isDark)
-                            )
+                                }
+                            }
                         }
                     }
 
@@ -4747,73 +4784,109 @@ fun ChuyenPickView(
 
                                 if (showDialog) {
                                     var searchQuery by remember { mutableStateOf("") }
-                                    AlertDialog(
-                                        onDismissRequest = { showDialog = false },
-                                        title = { Text("Chọn Rider nhận hỗ trợ", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
-                                        text = {
-                                            Column(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                OutlinedTextField(
-                                                    value = searchQuery,
-                                                    onValueChange = { searchQuery = it },
-                                                    placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    singleLine = true,
-                                                    colors = OutlinedTextFieldDefaults.colors(
-                                                        focusedTextColor = getTextColor(isDark),
-                                                        unfocusedTextColor = getTextColor(isDark),
-                                                        focusedBorderColor = ThemePrimary,
-                                                        unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f),
-                                                        unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f),
-                                                        focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.15f)
-                                                    )
-                                                )
-
-                                                val filteredDrivers = driversList.filter { driver ->
-                                                    val name = driver["name"]?.toString() ?: ""
-                                                    val code = driver["code"]?.toString() ?: ""
-                                                    name.contains(searchQuery, ignoreCase = true) || code.contains(searchQuery, ignoreCase = true)
-                                                }
-
-                                                LazyColumn(
-                                                    modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                                ) {
-                                                    if (filteredDrivers.isEmpty()) {
-                                                        item {
-                                                            Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
+                                    androidx.compose.ui.window.Dialog(onDismissRequest = { showDialog = false }) {
+                                        Card(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(16.dp),
+                                            shape = RoundedCornerShape(24.dp),
+                                            border = BorderStroke(1.dp, getGlassBorderColor(isDark)),
+                                            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        if (isDark) {
+                                                            Brush.verticalGradient(listOf(Color(0xFF131133), Color(0xFF0B0A1F)))
+                                                        } else {
+                                                            Brush.verticalGradient(listOf(Color(0xFFF0EFFF), Color(0xFFE3DCFF)))
                                                         }
-                                                    } else {
-                                                        items(filteredDrivers) { driver ->
-                                                            val dName = driver["name"]?.toString() ?: ""
-                                                            val dCode = driver["code"]?.toString() ?: ""
-                                                            Card(
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .clickable {
-                                                                        selectedDriverForThisCard = "$dName - $dCode"
-                                                                        showDialog = false
-                                                                    },
-                                                                colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                                                            ) {
-                                                                Column(modifier = Modifier.padding(12.dp)) {
-                                                                    Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
+                                                    )
+                                                    .padding(20.dp)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                ) {
+                                                    Text(
+                                                        "Chọn Rider nhận hỗ trợ",
+                                                        color = ThemePrimary,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 16.sp
+                                                    )
+
+                                                    OutlinedTextField(
+                                                        value = searchQuery,
+                                                        onValueChange = { searchQuery = it },
+                                                        placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        singleLine = true,
+                                                        colors = OutlinedTextFieldDefaults.colors(
+                                                            focusedTextColor = getTextColor(isDark),
+                                                            unfocusedTextColor = getTextColor(isDark),
+                                                            focusedBorderColor = ThemePrimary,
+                                                            unfocusedBorderColor = ThemePrimary.copy(alpha = 0.4f),
+                                                            unfocusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.1f),
+                                                            focusedContainerColor = getThemeSurfaceColor(isDark).copy(alpha = 0.15f)
+                                                        )
+                                                    )
+
+                                                    val filteredDrivers = driversList.filter { driver ->
+                                                        val name = driver["name"]?.toString() ?: ""
+                                                        val code = driver["code"]?.toString() ?: ""
+                                                        name.contains(searchQuery, ignoreCase = true) || code.contains(searchQuery, ignoreCase = true)
+                                                    }
+
+                                                    LazyColumn(
+                                                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(0.dp)
+                                                    ) {
+                                                        if (filteredDrivers.isEmpty()) {
+                                                            item {
+                                                                Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
+                                                            }
+                                                        } else {
+                                                            itemsIndexed(filteredDrivers) { index, driver ->
+                                                                val dName = driver["name"]?.toString() ?: ""
+                                                                val dCode = driver["code"]?.toString() ?: ""
+                                                                Column(
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .clickable {
+                                                                            selectedDriverForThisCard = "$dName - $dCode"
+                                                                            showDialog = false
+                                                                        }
+                                                                        .padding(vertical = 10.dp, horizontal = 4.dp)
+                                                                ) {
+                                                                    Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                                                }
+                                                                if (index < filteredDrivers.lastIndex) {
+                                                                    HorizontalDivider(
+                                                                        color = getTextColor(isDark).copy(alpha = 0.08f),
+                                                                        thickness = 0.8.dp,
+                                                                        modifier = Modifier.padding(horizontal = 4.dp)
+                                                                    )
                                                                 }
                                                             }
                                                         }
                                                     }
+
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.End
+                                                    ) {
+                                                        TextButton(
+                                                            onClick = { showDialog = false },
+                                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                                        ) {
+                                                            Text("ĐÓNG", color = ThemePrimary, fontWeight = FontWeight.Bold)
+                                                        }
+                                                    }
                                                 }
                                             }
-                                        },
-                                        confirmButton = {
-                                            TextButton(onClick = { showDialog = false }) {
-                                                Text("ĐÓNG", color = ThemePrimary)
-                                            }
-                                        },
-                                        containerColor = getThemeSurfaceColor(isDark)
-                                    )
+                                        }
+                                    }
                                 }
 
                                 Row(
