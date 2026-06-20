@@ -4255,16 +4255,16 @@ fun ChuyenPickView(
                                             .fillMaxWidth()
                                             .background(
                                                 if (isDark) {
-                                                    Brush.verticalGradient(listOf(Color(0xFF131133), Color(0xFF0B0A1F)))
+                                                    Brush.verticalGradient(listOf(Color(0xFF262262), Color(0xFF110E2E)))
                                                 } else {
                                                     Brush.verticalGradient(listOf(Color(0xFFF0EFFF), Color(0xFFE3DCFF)))
                                                 }
                                             )
-                                            .padding(20.dp)
+                                            .padding(16.dp)
                                     ) {
                                         Column(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
                                             Text(
                                                 "Chọn Rider nhận",
@@ -4298,7 +4298,7 @@ fun ChuyenPickView(
                                                 }
 
                                             LazyColumn(
-                                                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                                modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                                                 verticalArrangement = Arrangement.spacedBy(0.dp)
                                             ) {
                                                 if (filteredDrivers.isEmpty()) {
@@ -4316,7 +4316,7 @@ fun ChuyenPickView(
                                                                     selectedDriver = "$dName - $dCode"
                                                                     expanded = false
                                                                 }
-                                                                .padding(vertical = 10.dp, horizontal = 4.dp)
+                                                                .padding(vertical = 8.dp, horizontal = 4.dp)
                                                         ) {
                                                             Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                                         }
@@ -4879,16 +4879,16 @@ fun ChuyenPickView(
                                                     .fillMaxWidth()
                                                     .background(
                                                         if (isDark) {
-                                                            Brush.verticalGradient(listOf(Color(0xFF131133), Color(0xFF0B0A1F)))
+                                                            Brush.verticalGradient(listOf(Color(0xFF262262), Color(0xFF110E2E)))
                                                         } else {
                                                             Brush.verticalGradient(listOf(Color(0xFFF0EFFF), Color(0xFFE3DCFF)))
                                                         }
                                                     )
-                                                    .padding(20.dp)
+                                                    .padding(16.dp)
                                             ) {
                                                 Column(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Text(
                                                         "Chọn Rider nhận hỗ trợ",
@@ -4920,7 +4920,7 @@ fun ChuyenPickView(
                                                     }
 
                                                     LazyColumn(
-                                                        modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
+                                                        modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
                                                         verticalArrangement = Arrangement.spacedBy(0.dp)
                                                     ) {
                                                         if (filteredDrivers.isEmpty()) {
@@ -4938,7 +4938,7 @@ fun ChuyenPickView(
                                                                             selectedDriverForThisCard = "$dName - $dCode"
                                                                             showDialog = false
                                                                         }
-                                                                        .padding(vertical = 10.dp, horizontal = 4.dp)
+                                                                        .padding(vertical = 8.dp, horizontal = 4.dp)
                                                                 ) {
                                                                     Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                                                 }
