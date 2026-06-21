@@ -108,6 +108,13 @@ import java.util.Locale
 import java.util.Random
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import coil.ImageLoader
+import coil.compose.AsyncImage
+import coil.decode.ImageDecoderDecoder
+import coil.decode.GifDecoder
+import coil.request.ImageRequest
+import android.widget.VideoView
+import android.media.MediaPlayer
 
 // Theme Design System Tokens
 val ThemeBgColorDark = Color(0xFF0C0D24)
@@ -3103,10 +3110,27 @@ fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String
 
 fun extractPupCode(text: String): String? {
     if (text.isBlank()) return null
-    // 1. Remove all spaces and newlines
-    val cleanText = text.replace("\\s".toRegex(), "").uppercase(Locale.ROOT)
     
-    // 2. Match: PUP (or variants) + 8 date chars + 4-to-8 suffix chars
+    // 1. Try matching on the raw text to preserve word boundaries and avoid merging with adjacent lines (e.g. rider name)
+    val rawRegex = Regex("(?i)\\b(PUP|FUP|PLP|P0P|POP|POD|PU|F0P|PUPP)\\s*([0-9OILSGZ]{8})\\s*([A-Z0-9]{4,8})\\b")
+    val rawMatch = rawRegex.find(text.uppercase(Locale.ROOT))
+    if (rawMatch != null) {
+        val datePart = rawMatch.groupValues[2].replace(" ", "").replace("\n", "").map { char ->
+            when (char) {
+                'O' -> '0'
+                'I', 'L' -> '1'
+                'S' -> '5'
+                'G' -> '6'
+                'Z' -> '2'
+                else -> char
+            }
+        }.joinToString("")
+        val suffixPart = rawMatch.groupValues[3].replace(" ", "").replace("\n", "")
+        return "PUP" + datePart + suffixPart
+    }
+    
+    // 2. Fallback to matching on cleaned text (without spaces/newlines) if raw match fails
+    val cleanText = text.replace("\\s".toRegex(), "").uppercase(Locale.ROOT)
     val regex = Regex("(PUP|FUP|PLP|P0P|POP|POD|PU|PLP|F0P|PUPP)([0-9OILSGZ]{8})([A-Z0-9]{4,8})")
     val match = regex.find(cleanText)
     if (match != null) {
@@ -4381,6 +4405,11 @@ fun ChuyenPickView(
                                     val bodyJson = JSONObject().apply {
                                         put("action", "chuyen_pick")
                                         put("riderName", senderName)
+                                        put("senderName", senderName)
+                                        put("senderEmail", currentUserEmail)
+                                        put("email", currentUserEmail)
+                                        put("riderCode", currentRiderCode)
+                                        put("senderCode", currentRiderCode)
                                         put("pupCode", pupCode.trim().uppercase(Locale.ROOT))
                                         put("receiverRider", selectedDriver)
                                         put("timestamp", timeString)
@@ -4397,20 +4426,43 @@ fun ChuyenPickView(
                                         withContext(Dispatchers.Main) {
                                             isSending = false
                                             if (response.isSuccessful && responseBody != null) {
-                                                // Save transfer log in Firestore transfers collection
-                                                val targetPupClean = pupCode.trim().uppercase(Locale.ROOT)
-                                                db.collection("transfers").document(targetPupClean)
-                                                    .set(mapOf(
-                                                        "pupCode" to targetPupClean,
-                                                        "senderEmail" to currentUserEmail,
-                                                        "senderName" to senderName,
-                                                        "receiverRider" to selectedDriver,
-                                                        "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
-                                                    ))
+                                                var isSuccess = false
+                                                var errorMsg = "Lỗi phản hồi từ Server"
+                                                try {
+                                                    val respJson = JSONObject(responseBody)
+                                                    val statusVal = respJson.optString("status")
+                                                    if (statusVal == "success" || statusVal == "true" || respJson.optBoolean("status") == true) {
+                                                        isSuccess = true
+                                                    } else {
+                                                        errorMsg = respJson.optString("message", "Lỗi lưu trên Sheet")
+                                                    }
+                                                } catch (e: Exception) {
+                                                    Log.e("ChuyenPick", "Lỗi parse response", e)
+                                                    if (responseBody.lowercase(Locale.ROOT).contains("success") || responseBody.lowercase(Locale.ROOT).contains("true")) {
+                                                        isSuccess = true
+                                                    } else {
+                                                        errorMsg = responseBody
+                                                    }
+                                                }
 
-                                                Toast.makeText(context, "Chuyển Pick thành công!", Toast.LENGTH_SHORT).show()
-                                                pupCode = ""
-                                                selectedDriver = ""
+                                                if (isSuccess) {
+                                                    // Save transfer log in Firestore transfers collection
+                                                    val targetPupClean = pupCode.trim().uppercase(Locale.ROOT)
+                                                    db.collection("transfers").document(targetPupClean)
+                                                        .set(mapOf(
+                                                            "pupCode" to targetPupClean,
+                                                            "senderEmail" to currentUserEmail,
+                                                            "senderName" to senderName,
+                                                            "receiverRider" to selectedDriver,
+                                                            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                                                        ))
+
+                                                    Toast.makeText(context, "Chuyển Pick thành công!", Toast.LENGTH_SHORT).show()
+                                                    pupCode = ""
+                                                    selectedDriver = ""
+                                                } else {
+                                                    Toast.makeText(context, "Thất bại: $errorMsg", Toast.LENGTH_LONG).show()
+                                                }
                                             } else {
                                                 Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
                                             }
@@ -5099,27 +5151,26 @@ fun PrintLockedScreen(remainingText: String) {
         label = "flightProgress"
     )
 
-    Box(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .background(getThemeBgBrush(isDark))
-            .padding(24.dp),
-        contentAlignment = Alignment.Center
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        item {
             Text(
-                "ĐÃ BỊ KHÓA QUET & IN",
+                "ĐÃ BỊ KHÓA QUÉT & IN",
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
                 color = ThemePrimary,
-                letterSpacing = 1.sp
+                letterSpacing = 1.sp,
+                textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            
+        }
+
+        item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -5128,109 +5179,44 @@ fun PrintLockedScreen(remainingText: String) {
                     .background(getThemeSurfaceColor(isDark).copy(alpha = 0.2f))
                     .border(1.dp, getGlassBorderColor(isDark), RoundedCornerShape(16.dp))
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
-                    
-                    // 1. Robot 1 (Left)
-                    drawRoundRect(
-                        color = Color(0xFF80DEEA),
-                        topLeft = Offset(40.dp.toPx(), h - 90.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(40.dp.toPx(), 50.dp.toPx()),
-                        cornerRadius = CornerRadius(8.dp.toPx())
+                val context = LocalContext.current
+                val videoResourceId = context.resources.getIdentifier("video_locked_print", "raw", context.packageName)
+                
+                if (videoResourceId != 0) {
+                    AndroidView(
+                        factory = { ctx ->
+                            VideoView(ctx).apply {
+                                val videoUri = Uri.parse("android.resource://${ctx.packageName}/$videoResourceId")
+                                setVideoURI(videoUri)
+                                setOnPreparedListener { mediaPlayer ->
+                                    mediaPlayer.isLooping = true
+                                    // Tắt tiếng video để chạy êm ái
+                                    mediaPlayer.setVolume(0f, 0f)
+                                    start()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
-                    drawCircle(
-                        color = Color(0xFF00ACC1),
-                        radius = 12.dp.toPx(),
-                        center = Offset(60.dp.toPx(), h - 100.dp.toPx())
-                    )
-                    drawCircle(
-                        color = Color.White,
-                        radius = 3.dp.toPx(),
-                        center = Offset(60.dp.toPx(), h - 100.dp.toPx())
-                    )
-                    
-                    // 2. Printer (Right)
-                    drawRoundRect(
-                        color = Color(0xFFB0BEC5),
-                        topLeft = Offset(w - 80.dp.toPx(), h - 70.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(50.dp.toPx(), 35.dp.toPx()),
-                        cornerRadius = CornerRadius(4.dp.toPx())
-                    )
-                    drawRect(
-                        color = Color.White,
-                        topLeft = Offset(w - 70.dp.toPx(), h - 85.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 20.dp.toPx())
-                    )
-
-                    // 3. Robot 2 with Gun (Bottom Right)
-                    drawRoundRect(
-                        color = Color(0xFFFF8A80),
-                        topLeft = Offset(w - 140.dp.toPx(), h - 80.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(35.dp.toPx(), 40.dp.toPx()),
-                        cornerRadius = CornerRadius(6.dp.toPx())
-                    )
-                    drawCircle(
-                        color = Color(0xFFD32F2F),
-                        radius = 10.dp.toPx(),
-                        center = Offset(w - 122.dp.toPx(), h - 90.dp.toPx())
-                    )
-                    drawLine(
-                        color = Color.Black,
-                        start = Offset(w - 135.dp.toPx(), h - 80.dp.toPx()),
-                        end = Offset(w - 155.dp.toPx(), h - 95.dp.toPx()),
-                        strokeWidth = 4.dp.toPx()
-                    )
-
-                    // 4. Paper Airplane flight & shooting logic
-                    val flightStartX = 80.dp.toPx()
-                    val flightEndX = w - 80.dp.toPx()
-                    val flightY = h - 110.dp.toPx()
-                    
-                    val isLaserFired = progress in 0.45f..0.60f
-                    val isBurnt = progress >= 0.50f
-                    
-                    if (isLaserFired) {
-                        val targetX = flightStartX + (flightEndX - flightStartX) * 0.5f
-                        val targetY = flightY - 20.dp.toPx()
-                        drawLine(
-                            color = Color(0xFFFF1744),
-                            start = Offset(w - 155.dp.toPx(), h - 95.dp.toPx()),
-                            end = Offset(targetX, targetY),
-                            strokeWidth = 3.dp.toPx()
+                } else {
+                    // Dự phòng nếu chưa có video trong raw
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = ThemePrimary)
+                        Text(
+                            "Thiếu video_locked_print trong thư mục res/raw",
+                            color = ThemePrimary.copy(alpha = 0.5f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 60.dp)
                         )
-                    }
-
-                    if (!isBurnt) {
-                        val currentX = flightStartX + (flightEndX - flightStartX) * progress
-                        val airplanePath = androidx.compose.ui.graphics.Path().apply {
-                            moveTo(currentX, flightY - 10.dp.toPx())
-                            lineTo(currentX + 15.dp.toPx(), flightY - 15.dp.toPx())
-                            lineTo(currentX - 5.dp.toPx(), flightY - 25.dp.toPx())
-                            close()
-                        }
-                        drawPath(airplanePath, color = Color.White)
-                    } else {
-                        val explosionProgress = (progress - 0.5f) / 0.5f
-                        if (explosionProgress < 0.8f) {
-                            val hitX = flightStartX + (flightEndX - flightStartX) * 0.5f
-                            val fallY = (flightY - 20.dp.toPx()) + 80.dp.toPx() * explosionProgress
-                            drawCircle(
-                                color = Color(0xFFFF9100),
-                                radius = (15.dp.toPx() * (1f - explosionProgress)),
-                                center = Offset(hitX + (20.dp.toPx() * explosionProgress), fallY)
-                            )
-                            drawCircle(
-                                color = Color(0xFFFF3D00),
-                                radius = (8.dp.toPx() * (1f - explosionProgress)),
-                                center = Offset(hitX + (20.dp.toPx() * explosionProgress), fallY)
-                            )
-                        }
                     }
                 }
             }
-            
-            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        item {
             Text(
                 "Bạn đã bị khóa Quét & In vui lòng liên hệ quản lý để mở khóa",
                 color = getTextColor(isDark),
@@ -5239,7 +5225,9 @@ fun PrintLockedScreen(remainingText: String) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
-            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        item {
             Text(
                 "Thời gian còn lại: $remainingText",
                 color = ThemeAccent,
@@ -5296,92 +5284,38 @@ fun ChuyenPickLockedScreen(
                     .background(getThemeSurfaceColor(isDark).copy(alpha = 0.2f))
                     .border(1.dp, getGlassBorderColor(isDark), RoundedCornerShape(16.dp))
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val w = size.width
-                    val h = size.height
-                    
-                    val packageProgress = (animationProgress / 0.4f).coerceIn(0f, 1f)
-                    val isHit = animationProgress >= 0.4f
-                    val fallProgress = ((animationProgress - 0.4f) / 0.3f).coerceIn(0f, 1f)
-                    
-                    // Robot 2 (Top Right)
-                    drawRoundRect(
-                        color = Color(0xFFFFB74D),
-                        topLeft = Offset(w - 70.dp.toPx(), 40.dp.toPx()),
-                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 35.dp.toPx()),
-                        cornerRadius = CornerRadius(4.dp.toPx())
+                val context = LocalContext.current
+                val videoResourceId = context.resources.getIdentifier("video_locked_transfer", "raw", context.packageName)
+                
+                if (videoResourceId != 0) {
+                    AndroidView(
+                        factory = { ctx ->
+                            VideoView(ctx).apply {
+                                val videoUri = Uri.parse("android.resource://${ctx.packageName}/$videoResourceId")
+                                setVideoURI(videoUri)
+                                setOnPreparedListener { mediaPlayer ->
+                                    mediaPlayer.isLooping = true
+                                    // Tắt tiếng video
+                                    mediaPlayer.setVolume(0f, 0f)
+                                    start()
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
                     )
-                    drawCircle(
-                        color = Color(0xFFE65100),
-                        radius = 8.dp.toPx(),
-                        center = Offset(w - 55.dp.toPx(), 30.dp.toPx())
-                    )
-
-                    // Robot 1 (Bottom Left)
-                    val r1BaseX = 60.dp.toPx()
-                    val r1BaseY = h - 65.dp.toPx()
-                    
-                    val (r1X, r1Y, rotationAngle) = if (isHit) {
-                        val yOffset = 25.dp.toPx() * fallProgress
-                        Triple(r1BaseX + 15.dp.toPx() * fallProgress, r1BaseY + yOffset, 45f * fallProgress)
-                    } else {
-                        Triple(r1BaseX, r1BaseY, 0f)
-                    }
-
-                    if (isHit && fallProgress > 0.2f) {
-                        val starAngle = (animationProgress * 360f) * (Math.PI / 180f)
-                        val starRadius = 15.dp.toPx()
-                        val starX = r1X + 15.dp.toPx() + starRadius * Math.cos(starAngle).toFloat()
-                        val starY = r1Y - 15.dp.toPx() + starRadius * Math.sin(starAngle).toFloat()
-                        drawCircle(
-                            color = Color.Yellow,
-                            radius = 4.dp.toPx(),
-                            center = Offset(starX, starY)
+                } else {
+                    // Dự phòng
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = ThemePrimary)
+                        Text(
+                            "Thiếu video_locked_transfer trong thư mục res/raw",
+                            color = ThemePrimary.copy(alpha = 0.5f),
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 60.dp)
                         )
-                    }
-
-                    drawCircle(
-                        color = Color(0xFF81C784),
-                        radius = 10.dp.toPx(),
-                        center = Offset(r1X + 15.dp.toPx(), r1Y - 10.dp.toPx())
-                    )
-                    drawRoundRect(
-                        color = Color(0xFF4CAF50),
-                        topLeft = Offset(r1X, r1Y),
-                        size = androidx.compose.ui.geometry.Size(30.dp.toPx(), 35.dp.toPx()),
-                        cornerRadius = CornerRadius(4.dp.toPx())
-                    )
-
-                    // Flying package
-                    if (!isHit) {
-                        val startX = w - 80.dp.toPx()
-                        val startY = 50.dp.toPx()
-                        val endX = r1BaseX + 15.dp.toPx()
-                        val endY = r1BaseY - 15.dp.toPx()
-                        
-                        val currentX = startX + (endX - startX) * packageProgress
-                        val currentY = startY + (endY - startY) * packageProgress - (30.dp.toPx() * Math.sin(packageProgress * Math.PI).toFloat())
-                        
-                        drawRoundRect(
-                            color = Color(0xFF8D6E63),
-                            topLeft = Offset(currentX, currentY),
-                            size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 14.dp.toPx()),
-                            cornerRadius = CornerRadius(2.dp.toPx())
-                        )
-                    } else {
-                        val bounceProgress = ((animationProgress - 0.4f) / 0.4f).coerceIn(0f, 1f)
-                        if (bounceProgress < 1f) {
-                            val startX = r1BaseX + 15.dp.toPx()
-                            val startY = r1BaseY - 15.dp.toPx()
-                            val currentX = startX + 40.dp.toPx() * bounceProgress
-                            val currentY = startY + (10.dp.toPx() * bounceProgress) - (20.dp.toPx() * Math.sin(bounceProgress * Math.PI).toFloat())
-                            drawRoundRect(
-                                color = Color(0xFF8D6E63),
-                                topLeft = Offset(currentX, currentY),
-                                size = androidx.compose.ui.geometry.Size(14.dp.toPx(), 14.dp.toPx()),
-                                cornerRadius = CornerRadius(2.dp.toPx())
-                            )
-                        }
                     }
                 }
             }
