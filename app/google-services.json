@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1032675327250",
+    "project_id": "hotroin-a7526",
+    "storage_bucket": "hotroin-a7526.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1032675327250:android:169d65e3449d6510d6c7cb",
+        "android_client_info": {
+          "package_name": "com.VTDStadio.Hotroin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1032675327250-leotr6bccc18n5qjrjs7veh2pq1tnmh6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.VTDStadio.Hotroin",
+            "certificate_hash": "5f569ebad4ec55cc9b1ebdea13b84d163c4585f7"
+          }
+        },
+        {
+          "client_id": "1032675327250-vdjje36d5s46f3ij03tr2am08jeu23ja.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDoACNIrQy7eGe_PPeTQrINu9fTsTDEOc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1032675327250-vdjje36d5s46f3ij03tr2am08jeu23ja.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
