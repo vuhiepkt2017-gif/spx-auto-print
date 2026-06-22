@@ -35,9 +35,9 @@ android {
     signingConfigs {
         create("release") {
             storeFile = file(localProperties.getProperty("signing.storeFilePath") ?: "spx-auto-print-key.jks")
-            storePassword = localProperties.getProperty("signing.storePassword") ?: ""
-            keyAlias = localProperties.getProperty("signing.keyAlias") ?: ""
-            keyPassword = localProperties.getProperty("signing.keyPassword") ?: ""
+            storePassword = localProperties.getProperty("signing.storePassword") ?: "spxautoprint"
+            keyAlias = localProperties.getProperty("signing.keyAlias") ?: "spx-key"
+            keyPassword = localProperties.getProperty("signing.keyPassword") ?: "spxautoprint"
         }
     }
 
