@@ -4110,20 +4110,49 @@ fun ChuyenPickView(
                     val inputStream = context.contentResolver.openInputStream(uri)
                     val bitmap = BitmapFactory.decodeStream(inputStream)
                     if (bitmap != null) {
-                        val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                        val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
+                        val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
+                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(croppedBitmap, 0)
                         val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
-                        recognizer.process(inputImage)
+                        
+                        recognizer.process(croppedImage)
                             .addOnSuccessListener { visionText ->
                                 val code = extractPupCode(visionText.text)
                                 if (code != null) {
                                     pupCode = code
                                     Toast.makeText(context, "Đã tìm thấy mã PUP: $code", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                    val fullImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                                    recognizer.process(fullImage)
+                                        .addOnSuccessListener { fullVisionText ->
+                                            val fallbackCode = extractPupCode(fullVisionText.text)
+                                            if (fallbackCode != null) {
+                                                pupCode = fallbackCode
+                                                Toast.makeText(context, "Đã tìm thấy mã PUP: $fallbackCode", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                        .addOnFailureListener {
+                                            Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                        }
                                 }
                             }
                             .addOnFailureListener { e ->
-                                Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                val fullImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                                recognizer.process(fullImage)
+                                    .addOnSuccessListener { fullVisionText ->
+                                        val fallbackCode = extractPupCode(fullVisionText.text)
+                                        if (fallbackCode != null) {
+                                            pupCode = fallbackCode
+                                            Toast.makeText(context, "Đã tìm thấy mã PUP: $fallbackCode", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                    .addOnFailureListener {
+                                        Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                             }
                     }
                 } catch (e: Exception) {
@@ -4148,20 +4177,49 @@ fun ChuyenPickView(
                     val inputStream = context.contentResolver.openInputStream(uri)
                     val bitmap = BitmapFactory.decodeStream(inputStream)
                     if (bitmap != null) {
-                        val inputImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                        val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
+                        val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
+                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(croppedBitmap, 0)
                         val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
-                        recognizer.process(inputImage)
+                        
+                        recognizer.process(croppedImage)
                             .addOnSuccessListener { visionText ->
                                 val code = extractPupCode(visionText.text)
                                 if (code != null) {
                                     supportPup = code
                                     Toast.makeText(context, "Đã tìm thấy mã PUP hỗ trợ: $code", Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                    val fullImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                                    recognizer.process(fullImage)
+                                        .addOnSuccessListener { fullVisionText ->
+                                            val fallbackCode = extractPupCode(fullVisionText.text)
+                                            if (fallbackCode != null) {
+                                                supportPup = fallbackCode
+                                                Toast.makeText(context, "Đã tìm thấy mã PUP hỗ trợ: $fallbackCode", Toast.LENGTH_SHORT).show()
+                                            } else {
+                                                Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                        .addOnFailureListener {
+                                            Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                        }
                                 }
                             }
                             .addOnFailureListener { e ->
-                                Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                val fullImage = com.google.mlkit.vision.common.InputImage.fromBitmap(bitmap, 0)
+                                recognizer.process(fullImage)
+                                    .addOnSuccessListener { fullVisionText ->
+                                        val fallbackCode = extractPupCode(fullVisionText.text)
+                                        if (fallbackCode != null) {
+                                            supportPup = fallbackCode
+                                            Toast.makeText(context, "Đã tìm thấy mã PUP hỗ trợ: $fallbackCode", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Không tìm thấy mã PUP trong ảnh!", Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                    .addOnFailureListener {
+                                        Toast.makeText(context, "Lỗi đọc chữ: ${e.message}", Toast.LENGTH_SHORT).show()
+                                    }
                             }
                     }
                 } catch (e: Exception) {
