@@ -3126,7 +3126,8 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = rawMatch.groupValues[3].replace(" ", "").replace("\n", "")
-        return "PUP" + datePart + suffixPart
+        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        return "PUP" + datePart + finalSuffix
     }
     
     // 2. Fallback to matching on cleaned text (without spaces/newlines) if raw match fails
@@ -3145,7 +3146,8 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = match.groupValues[3]
-        return "PUP" + datePart + suffixPart
+        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        return "PUP" + datePart + finalSuffix
     }
     
     // Fallback: match PUP (or variants) + 12-to-16 alphanumeric chars
@@ -3164,14 +3166,18 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = full.substring(8)
-        return "PUP" + datePart + suffixPart
+        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        return "PUP" + datePart + finalSuffix
     }
     
     // Backup fallback: Just find any sequence of 8 digits + 4-to-8 alphanumeric chars
     val backupRegex = Regex("([0-9]{8})([A-Z0-9]{4,8})")
     val backupMatch = backupRegex.find(cleanText)
     if (backupMatch != null) {
-        return "PUP" + backupMatch.value
+        val datePart = backupMatch.groupValues[1]
+        val suffixPart = backupMatch.groupValues[2]
+        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        return "PUP" + datePart + finalSuffix
     }
     return null
 }
