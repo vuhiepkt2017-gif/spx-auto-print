@@ -4438,7 +4438,8 @@ fun ChuyenPickView(
                                                     }
                                                 } catch (e: Exception) {
                                                     Log.e("ChuyenPick", "Lỗi parse response", e)
-                                                    if (responseBody.lowercase(Locale.ROOT).contains("success") || responseBody.lowercase(Locale.ROOT).contains("true")) {
+                                                    val cleanBody = responseBody.trim().lowercase(Locale.ROOT)
+                                                    if (cleanBody == "success" || cleanBody == "true") {
                                                         isSuccess = true
                                                     } else {
                                                         errorMsg = responseBody
@@ -4461,7 +4462,9 @@ fun ChuyenPickView(
                                                     pupCode = ""
                                                     selectedDriver = ""
                                                 } else {
-                                                    Toast.makeText(context, "Thất bại: $errorMsg", Toast.LENGTH_LONG).show()
+                                                    val displayError = if (errorMsg.length > 150) errorMsg.substring(0, 150) + "..." else errorMsg
+                                                    Toast.makeText(context, "Thất bại: $displayError", Toast.LENGTH_LONG).show()
+                                                    Log.e("ChuyenPick", "Lưu thất bại: $errorMsg")
                                                 }
                                             } else {
                                                 Toast.makeText(context, "Lỗi chuyển: ${response.message}", Toast.LENGTH_SHORT).show()
