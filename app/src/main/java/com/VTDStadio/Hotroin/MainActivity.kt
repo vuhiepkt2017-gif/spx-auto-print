@@ -3114,6 +3114,7 @@ fun extractPupCode(text: String): String? {
     // Helper function to clean double-char W misreadings (e.g., VV, VW, WV, UU, VU, UV -> W)
     fun cleanSuffix(suffix: String): String {
         return suffix
+            .replace("VWN", "WNE")
             .replace("VV", "W")
             .replace("VW", "W")
             .replace("WV", "W")
