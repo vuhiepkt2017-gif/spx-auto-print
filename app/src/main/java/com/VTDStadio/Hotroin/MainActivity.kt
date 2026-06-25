@@ -3111,6 +3111,17 @@ fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String
 fun extractPupCode(text: String): String? {
     if (text.isBlank()) return null
     
+    // Helper function to clean double-char W misreadings (e.g., VV, VW, WV, UU, VU, UV -> W)
+    fun cleanSuffix(suffix: String): String {
+        return suffix
+            .replace("VV", "W")
+            .replace("VW", "W")
+            .replace("WV", "W")
+            .replace("UU", "W")
+            .replace("VU", "W")
+            .replace("UV", "W")
+    }
+
     // 1. Try matching on the raw text to preserve word boundaries and avoid merging with adjacent lines (e.g. rider name)
     val rawRegex = Regex("(?i)\\b(PUP|FUP|PLP|P0P|POP|POD|PU|F0P|PUPP)\\s*([0-9OILSGZ]{8})\\s*([A-Z0-9]{4,8})\\b")
     val rawMatch = rawRegex.find(text.uppercase(Locale.ROOT))
@@ -3126,7 +3137,8 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = rawMatch.groupValues[3].replace(" ", "").replace("\n", "")
-        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        val cleaned = cleanSuffix(suffixPart)
+        val finalSuffix = if (cleaned.length > 5) cleaned.substring(0, 5) else cleaned
         return "PUP" + datePart + finalSuffix
     }
     
@@ -3146,7 +3158,8 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = match.groupValues[3]
-        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        val cleaned = cleanSuffix(suffixPart)
+        val finalSuffix = if (cleaned.length > 5) cleaned.substring(0, 5) else cleaned
         return "PUP" + datePart + finalSuffix
     }
     
@@ -3166,7 +3179,8 @@ fun extractPupCode(text: String): String? {
             }
         }.joinToString("")
         val suffixPart = full.substring(8)
-        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        val cleaned = cleanSuffix(suffixPart)
+        val finalSuffix = if (cleaned.length > 5) cleaned.substring(0, 5) else cleaned
         return "PUP" + datePart + finalSuffix
     }
     
@@ -3176,7 +3190,8 @@ fun extractPupCode(text: String): String? {
     if (backupMatch != null) {
         val datePart = backupMatch.groupValues[1]
         val suffixPart = backupMatch.groupValues[2]
-        val finalSuffix = if (suffixPart.length > 5) suffixPart.substring(0, 5) else suffixPart
+        val cleaned = cleanSuffix(suffixPart)
+        val finalSuffix = if (cleaned.length > 5) cleaned.substring(0, 5) else cleaned
         return "PUP" + datePart + finalSuffix
     }
     return null
@@ -4112,7 +4127,8 @@ fun ChuyenPickView(
                     if (bitmap != null) {
                         val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
                         val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
-                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(croppedBitmap, 0)
+                        val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(croppedBitmap, croppedBitmap.width * 2, croppedBitmap.height * 2, true)
+                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(scaledBitmap, 0)
                         val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
                         
                         recognizer.process(croppedImage)
@@ -4179,7 +4195,8 @@ fun ChuyenPickView(
                     if (bitmap != null) {
                         val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
                         val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
-                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(croppedBitmap, 0)
+                        val scaledBitmap = android.graphics.Bitmap.createScaledBitmap(croppedBitmap, croppedBitmap.width * 2, croppedBitmap.height * 2, true)
+                        val croppedImage = com.google.mlkit.vision.common.InputImage.fromBitmap(scaledBitmap, 0)
                         val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS)
                         
                         recognizer.process(croppedImage)
