@@ -2533,25 +2533,6 @@ fun LoginScreen(
                                             isLoading = false
                                             onLoginSuccess(userEmail, userName, "Admin", true, "ADMIN", "Admin")
                                         }
-                                } else if (userEmail == "tester@gmail.com" || userEmail.contains("tester")) {
-                                    // Tester bypassed directly without rider code
-                                    db.collection("active_riders").document(userEmail)
-                                        .set(mapOf(
-                                            "email" to userEmail,
-                                            "name" to userName,
-                                            "role" to "Rider",
-                                            "riderCode" to "TESTER",
-                                            "riderRealName" to "Tester",
-                                            "lastActive" to Date()
-                                        ))
-                                        .addOnSuccessListener {
-                                            isLoading = false
-                                            onLoginSuccess(userEmail, userName, "Rider", true, "TESTER", "Tester")
-                                        }
-                                        .addOnFailureListener { e ->
-                                            isLoading = false
-                                            onLoginSuccess(userEmail, userName, "Rider", true, "TESTER", "Tester")
-                                        }
                                 } else {
                                     // Normal user: Check if already registered
                                     db.collection("active_riders").document(userEmail).get()
@@ -2697,35 +2678,6 @@ fun LoginScreen(
                                 Icon(Icons.Default.Login, contentDescription = "Login", tint = getButtonTextColor())
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("ĐĂNG NHẬP GOOGLE", fontWeight = FontWeight.Bold, color = getButtonTextColor())
-                            }
-                            
-                            Spacer(modifier = Modifier.height(4.dp))
-                            
-                            OutlinedButton(
-                                onClick = {
-                                    // Bypass Google Login and log in directly as a Tester
-                                    onLoginSuccess("tester@gmail.com", "Tester Account", "Rider", true, "TESTER", "Tester")
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp),
-                                border = BorderStroke(1.dp, ThemePrimary.copy(alpha = 0.6f)),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(
-                                    containerColor = Color.Transparent
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Science,
-                                    contentDescription = "Tester Login",
-                                    tint = ThemePrimary
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    "ĐĂNG NHẬP TESTER (Bypass)",
-                                    fontWeight = FontWeight.Bold,
-                                    color = getTextColor(isDark)
-                                )
                             }
                         } else {
                             Text(
