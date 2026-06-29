@@ -2606,7 +2606,8 @@ fun LoginScreen(
             }
         } catch (e: Exception) {
             val currentSha1 = getAppSignatureSHA1(context)
-            errorMessage = "Lỗi Google Sign-In: ${e.message}\nSHA-1 hiện tại của App:\n$currentSha1"
+            Log.e("GoogleSignIn", "Lỗi Google Sign-In: ${e.message}, SHA-1 của App: $currentSha1")
+            errorMessage = "Lỗi Google Sign-In: ${e.message}"
         }
     }
 
