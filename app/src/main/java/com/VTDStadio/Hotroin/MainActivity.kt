@@ -440,8 +440,34 @@ fun extractTargetCodes(text: String): List<String> {
             found.add("VN" + cleanedDigits)
         }
     }
-    
     return found.distinct()
+}
+
+fun getAppSignatureSHA1(context: Context): String {
+    try {
+        val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+        }
+        
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+        
+        if (signatures != null && signatures.isNotEmpty()) {
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            val publicKey = md.digest(signatures[0].toByteArray())
+            return publicKey.joinToString(":") { String.format("%02X", it) }
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    return "Không thể lấy SHA-1"
 }
 
 class MainActivity : ComponentActivity() {
@@ -2579,7 +2605,8 @@ fun LoginScreen(
                 errorMessage = "Không thể lấy tài khoản Google."
             }
         } catch (e: Exception) {
-            errorMessage = "Lỗi Google Sign-In: ${e.message}"
+            val currentSha1 = getAppSignatureSHA1(context)
+            errorMessage = "Lỗi Google Sign-In: ${e.message}\nSHA-1 hiện tại của App:\n$currentSha1"
         }
     }
 
