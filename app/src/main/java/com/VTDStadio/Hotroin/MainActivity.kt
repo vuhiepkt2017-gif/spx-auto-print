@@ -1126,19 +1126,38 @@ fun ShopeeAutoPrintApp(
         if (isLoggedIn && currentUserEmail.isNotBlank()) {
             userLockListener = db.collection("active_riders").document(currentUserEmail)
                 .addSnapshotListener { snapshot, error ->
-                    if (snapshot != null && snapshot.exists()) {
-                        isPrintLocked = snapshot.getBoolean("isPrintLocked") ?: false
-                        isChuyenPickLocked = snapshot.getBoolean("isChuyenPickLocked") ?: false
-                        printLockedUntil = snapshot.getDate("printLockedUntil")
-                        chuyenPickLockedUntil = snapshot.getDate("chuyenPickLockedUntil")
-                        val reportsList = snapshot.get("reports") as? List<Map<String, Any>>
-                        chuyenPickLockedReports = reportsList ?: emptyList()
-                        
-                        // Dynamically update user role from Firestore if it changes or exists
-                        val serverRole = snapshot.getString("role")
-                        if (!serverRole.isNullOrBlank() && serverRole != currentUserRole) {
-                            currentUserRole = serverRole
-                            sharedPreferences.edit().putString("user_role", serverRole).apply()
+                    if (snapshot != null) {
+                        if (snapshot.exists()) {
+                            isPrintLocked = snapshot.getBoolean("isPrintLocked") ?: false
+                            isChuyenPickLocked = snapshot.getBoolean("isChuyenPickLocked") ?: false
+                            printLockedUntil = snapshot.getDate("printLockedUntil")
+                            chuyenPickLockedUntil = snapshot.getDate("chuyenPickLockedUntil")
+                            val reportsList = snapshot.get("reports") as? List<Map<String, Any>>
+                            chuyenPickLockedReports = reportsList ?: emptyList()
+                            
+                            // Dynamically update user role from Firestore if it changes or exists
+                            val serverRole = snapshot.getString("role")
+                            if (!serverRole.isNullOrBlank() && serverRole != currentUserRole) {
+                                currentUserRole = serverRole
+                                sharedPreferences.edit().putString("user_role", serverRole).apply()
+                            }
+                        } else {
+                            // Document deleted! Force logout
+                            FirebaseAuth.getInstance().signOut()
+                            sharedPreferences.edit()
+                                .putBoolean("is_logged_in", false)
+                                .putString("user_email", "")
+                                .putString("user_name", "")
+                                .putString("user_role", "")
+                                .putString("rider_code", "")
+                                .putString("rider_real_name", "")
+                                .apply()
+                            isLoggedIn = false
+                            currentUserEmail = ""
+                            currentUserName = ""
+                            currentUserRole = ""
+                            currentRiderCode = ""
+                            currentRiderRealName = ""
                         }
                     }
                 }
@@ -2412,6 +2431,16 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
                                 }
                                 IconButton(onClick = {
                                     db.collection("rider_codes").document(code).delete()
+                                        .addOnSuccessListener {
+                                            db.collection("active_riders")
+                                                .whereEqualTo("riderCode", code)
+                                                .get()
+                                                .addOnSuccessListener { querySnapshot ->
+                                                    for (doc in querySnapshot.documents) {
+                                                        doc.reference.delete()
+                                                    }
+                                                }
+                                        }
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Xóa Code", tint = ThemePrimary)
                                 }
@@ -4982,11 +5011,27 @@ fun ChuyenPickView(
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Column {
-                                Text("PUP: $p", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
-                                Text("Gửi bởi: $sender", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
-                                Text("Gửi tới: $rec", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
-                                Text("Trạng thái: $status", color = if (status == "Pushed") Color.Green else ThemeAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("PUP: $p", fontWeight = FontWeight.Bold, color = getTextColor(isDark), fontSize = 13.sp)
+                                    Text("Gửi bởi: $sender", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Text("Gửi tới: $rec", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Text("Trạng thái: $status", color = if (status == "Pushed") Color.Green else ThemeAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                }
+                                IconButton(onClick = {
+                                    db.collection("support_pushes").document(dId).delete()
+                                }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Xóa yêu cầu",
+                                        tint = ThemePrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
                             }
 
                             if (status == "Pending") {
