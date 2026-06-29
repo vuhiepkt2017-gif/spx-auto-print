@@ -483,6 +483,20 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var isDark by remember { mutableStateOf(sharedPreferences.getBoolean("is_dark_theme", true)) }
+            
+            // Adjust status bar and navigation bar colors based on theme
+            val view = androidx.compose.ui.platform.LocalView.current
+            if (!view.isInEditMode) {
+                androidx.compose.runtime.SideEffect {
+                    val window = (view.context as android.app.Activity).window
+                    window.statusBarColor = android.graphics.Color.TRANSPARENT
+                    window.navigationBarColor = android.graphics.Color.TRANSPARENT
+                    val windowInsetsController = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                    windowInsetsController.isAppearanceLightStatusBars = !isDark
+                    windowInsetsController.isAppearanceLightNavigationBars = !isDark
+                }
+            }
+
             CompositionLocalProvider(LocalThemeIsDark provides isDark) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
