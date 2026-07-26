@@ -23,8 +23,8 @@ android {
         applicationId = "com.VTDStadio.Hotroin"
         minSdk = 24
         targetSdk = 35
-        versionCode = 22
-        versionName = "3.1"
+        versionCode = 23
+        versionName = "3.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -85,14 +85,17 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // CameraX (để quét mã vạch qua camera)
-    val cameraxVersion = "1.3.1"
+    val cameraxVersion = "1.4.1"
     implementation("androidx.camera:camera-core:$cameraxVersion")
     implementation("androidx.camera:camera-camera2:$cameraxVersion")
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
+    // Force graphics-path update to 1.1.0 to support 16 KB page size
+    implementation("androidx.graphics:graphics-path:1.1.0")
+
     // ML Kit Barcode Scanning qua Google Play Services
-    implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.0")
+    implementation("com.google.android.gms:play-services-mlkit-barcode-scanning:18.3.1")
     // ML Kit Text Recognition qua Google Play Services
     implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.0")
     
