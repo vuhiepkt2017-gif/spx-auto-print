@@ -17,14 +17,14 @@ val localProperties = Properties().apply {
 
 android {
     namespace = "com.VTDStadio.Hotroin"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.VTDStadio.Hotroin"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 24
-        versionName = "3.3"
+        targetSdk = 36
+        versionCode = 25
+        versionName = "3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
