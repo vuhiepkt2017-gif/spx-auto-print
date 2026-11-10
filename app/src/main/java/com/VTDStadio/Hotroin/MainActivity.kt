@@ -669,6 +669,15 @@ fun ShopeeAutoPrintApp(
     var sheetPassword by remember { mutableStateOf(sharedPreferences.getString("sheet_password", "") ?: "") }
     var currentRiderRealName by remember { mutableStateOf(sharedPreferences.getString("rider_real_name", "") ?: "") }
 
+    // Ensure Firebase Auth session is active when logged in
+    LaunchedEffect(isLoggedIn) {
+        if (isLoggedIn && FirebaseAuth.getInstance().currentUser == null) {
+            Log.w("ShopeeAutoPrint", "isLoggedIn is true but FirebaseAuth currentUser is null! Re-authenticating.")
+            isLoggedIn = false
+            sharedPreferences.edit().putBoolean("is_logged_in", false).apply()
+        }
+    }
+
     // Active Screen States
     var activeTab by remember { mutableStateOf(0) } // 0: Quét & In, 1: Quản trị (Chỉ Admin)
     var orderCode by remember { mutableStateOf("") }
@@ -2335,15 +2344,23 @@ fun AdminCreateRiderSection(db: FirebaseFirestore) {
                     }
                     isProcessing = true
                     val codeDoc = riderCode.trim().uppercase(Locale.ROOT)
+                    val rName = riderName.trim()
+                    val riderData = mapOf(
+                        "code" to codeDoc,
+                        "name" to rName,
+                        "createdBy" to "Admin"
+                    )
+                    val pupData = mapOf(
+                        "code" to codeDoc,
+                        "name" to rName,
+                        "isOutHub" to false
+                    )
                     db.collection("rider_codes").document(codeDoc)
-                        .set(mapOf(
-                            "code" to codeDoc,
-                            "name" to riderName.trim(),
-                            "createdBy" to "Admin"
-                        ))
+                        .set(riderData)
                         .addOnSuccessListener {
+                            db.collection("pup_drivers").document(codeDoc).set(pupData)
                             isProcessing = false
-                            Toast.makeText(context, "Đã tạo/cập nhật Code Rider!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Đã tạo/cập nhật Code Rider & đồng bộ toàn hệ thống!", Toast.LENGTH_SHORT).show()
                             riderCode = ""
                             riderName = ""
                         }
@@ -2431,15 +2448,14 @@ fun AdminRiderListSection(db: FirebaseFirestore) {
                                 }
                                 IconButton(onClick = {
                                     db.collection("rider_codes").document(code).delete()
-                                        .addOnSuccessListener {
-                                            db.collection("active_riders")
-                                                .whereEqualTo("riderCode", code)
-                                                .get()
-                                                .addOnSuccessListener { querySnapshot ->
-                                                    for (doc in querySnapshot.documents) {
-                                                        doc.reference.delete()
-                                                    }
-                                                }
+                                    db.collection("pup_drivers").document(code).delete()
+                                    db.collection("active_riders")
+                                        .whereEqualTo("riderCode", code)
+                                        .get()
+                                        .addOnSuccessListener { querySnapshot ->
+                                            for (doc in querySnapshot.documents) {
+                                                doc.reference.delete()
+                                            }
                                         }
                                 }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Xóa Code", tint = ThemePrimary)
@@ -4009,16 +4025,24 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                         return@Premium3DButton
                     }
                     isProcessing = true
-                    val codeDoc = driverCode.trim()
+                    val codeDoc = driverCode.trim().uppercase(Locale.ROOT)
+                    val dName = driverName.trim()
+                    val pupData = mapOf(
+                        "name" to dName,
+                        "code" to codeDoc,
+                        "isOutHub" to isOutHub
+                    )
+                    val riderData = mapOf(
+                        "code" to codeDoc,
+                        "name" to dName,
+                        "createdBy" to "Admin"
+                    )
                     db.collection("pup_drivers").document(codeDoc)
-                        .set(mapOf(
-                            "name" to driverName.trim(),
-                            "code" to codeDoc,
-                            "isOutHub" to isOutHub
-                        ))
+                        .set(pupData)
                         .addOnSuccessListener {
+                            db.collection("rider_codes").document(codeDoc).set(riderData)
                             isProcessing = false
-                            Toast.makeText(context, "Đã thêm Rider nhận!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Đã thêm Rider nhận & đồng bộ toàn hệ thống!", Toast.LENGTH_SHORT).show()
                             driverName = ""
                             driverCode = ""
                             isOutHub = false
@@ -4067,6 +4091,7 @@ fun AdminPupDriversSection(db: FirebaseFirestore) {
                             Text("$name - $code$suffix", color = getTextColor(isDark), fontWeight = FontWeight.Medium)
                             IconButton(onClick = {
                                 db.collection("pup_drivers").document(code).delete()
+                                db.collection("rider_codes").document(code).delete()
                             }) {
                                 Icon(
                                     imageVector = Icons.Default.Delete,
@@ -4098,14 +4123,127 @@ fun ChuyenPickView(
     var pupCode by remember { mutableStateOf("") }
     var selectedDriver by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
-    var driversList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
     var expanded by remember { mutableStateOf(false) }
-
     var activeSupportList by remember { mutableStateOf(listOf<SupportPushItem>()) }
 
+    var pupDriversList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+    var riderCodesList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+    var activeRidersList by remember { mutableStateOf(listOf<Map<String, Any>>()) }
+    var isLoadingDrivers by remember { mutableStateOf(true) }
+    var driversLoadError by remember { mutableStateOf<String?>(null) }
+
+    val driversList = remember(pupDriversList, riderCodesList, activeRidersList) {
+        val map = linkedMapOf<String, Map<String, Any>>()
+        
+        // 1. pup_drivers (có name, code, isOutHub)
+        for (item in pupDriversList) {
+            val code = item["code"]?.toString()?.trim()?.uppercase(Locale.ROOT) ?: ""
+            if (code.isNotBlank()) {
+                map[code] = item
+            }
+        }
+        
+        // 2. rider_codes (đồng bộ rider do admin tạo)
+        for (item in riderCodesList) {
+            val code = item["code"]?.toString()?.trim()?.uppercase(Locale.ROOT) ?: ""
+            if (code.isNotBlank() && !map.containsKey(code)) {
+                map[code] = mapOf(
+                    "code" to code,
+                    "name" to (item["name"]?.toString() ?: ""),
+                    "isOutHub" to false
+                )
+            }
+        }
+
+        // 3. active_riders (rider đã kích hoạt tài khoản)
+        for (item in activeRidersList) {
+            val code = item["riderCode"]?.toString()?.trim()?.uppercase(Locale.ROOT) ?: ""
+            val name = (item["riderRealName"]?.toString() ?: item["name"]?.toString() ?: "").trim()
+            if (code.isNotBlank() && code != "ADMIN" && code != "NONE" && !map.containsKey(code)) {
+                map[code] = mapOf(
+                    "code" to code,
+                    "name" to name,
+                    "isOutHub" to false
+                )
+            }
+        }
+        map.values.sortedBy { it["code"]?.toString() ?: "" }
+    }
+
+    fun refreshDriversList() {
+        isLoadingDrivers = true
+        driversLoadError = null
+        db.collection("pup_drivers").get()
+            .addOnSuccessListener { s ->
+                pupDriversList = s.documents.mapNotNull { it.data }
+                isLoadingDrivers = false
+            }
+            .addOnFailureListener { e ->
+                Log.e("ChuyenPick", "Lỗi tải pup_drivers: ${e.message}", e)
+                driversLoadError = e.message
+                isLoadingDrivers = false
+            }
+        db.collection("rider_codes").get()
+            .addOnSuccessListener { s ->
+                riderCodesList = s.documents.mapNotNull { it.data }
+            }
+            .addOnFailureListener { e ->
+                Log.e("ChuyenPick", "Lỗi tải rider_codes: ${e.message}", e)
+            }
+        db.collection("active_riders").get()
+            .addOnSuccessListener { s ->
+                activeRidersList = s.documents.mapNotNull { it.data }
+            }
+            .addOnFailureListener { e ->
+                Log.e("ChuyenPick", "Lỗi tải active_riders: ${e.message}", e)
+            }
+    }
+
+    DisposableEffect(Unit) {
+        val regPup = db.collection("pup_drivers")
+            .addSnapshotListener { snapshot, error ->
+                isLoadingDrivers = false
+                if (error != null) {
+                    Log.e("ChuyenPick", "Error listening to pup_drivers: ${error.message}", error)
+                    driversLoadError = error.message
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    pupDriversList = snapshot.documents.mapNotNull { it.data }
+                }
+            }
+
+        val regRider = db.collection("rider_codes")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("ChuyenPick", "Error listening to rider_codes: ${error.message}", error)
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    riderCodesList = snapshot.documents.mapNotNull { it.data }
+                }
+            }
+
+        val regActive = db.collection("active_riders")
+            .addSnapshotListener { snapshot, error ->
+                if (snapshot != null) {
+                    activeRidersList = snapshot.documents.mapNotNull { it.data }
+                }
+            }
+
+        // Tải tức thì lần đầu
+        refreshDriversList()
+
+        onDispose {
+            regPup.remove()
+            regRider.remove()
+            regActive.remove()
+        }
+    }
+
     if (currentUserRole == "Admin") {
-        LaunchedEffect(Unit) {
-            db.collection("support_pushes")
+        DisposableEffect(Unit) {
+            val regSupport = db.collection("support_pushes")
                 .orderBy("timeMs", com.google.firebase.firestore.Query.Direction.DESCENDING)
                 .addSnapshotListener { snap, err ->
                     if (snap != null) {
@@ -4121,23 +4259,10 @@ fun ChuyenPickView(
                         }
                     }
                 }
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        db.collection("pup_drivers")
-            .addSnapshotListener { snapshot, error ->
-                if (snapshot != null) {
-                    val list = mutableListOf<Map<String, Any>>()
-                    for (doc in snapshot.documents) {
-                        val data = doc.data
-                        if (data != null) {
-                            list.add(data)
-                        }
-                    }
-                    driversList = list
-                }
+            onDispose {
+                regSupport.remove()
             }
+        }
     }
 
     val ocrPhotoLauncher = rememberLauncherForActivityResult(
@@ -4395,17 +4520,34 @@ fun ChuyenPickView(
                                             modifier = Modifier.fillMaxWidth(),
                                             verticalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text(
-                                                "Chọn Rider nhận",
-                                                color = ThemePrimary,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 16.sp
-                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    "Chọn Rider nhận (${driversList.size})",
+                                                    color = ThemePrimary,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 16.sp
+                                                )
+                                                IconButton(
+                                                    onClick = { refreshDriversList() },
+                                                    modifier = Modifier.size(28.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Refresh,
+                                                        contentDescription = "Làm mới",
+                                                        tint = ThemePrimary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
 
                                             OutlinedTextField(
                                                 value = searchDriverQueryDialog,
                                                 onValueChange = { searchDriverQueryDialog = it },
-                                                placeholder = { Text("Tìm kiếm Rider...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
+                                                placeholder = { Text("Tìm kiếm theo tên hoặc mã...", color = getTextColor(isDark).copy(alpha = 0.5f)) },
                                                 modifier = Modifier.fillMaxWidth(),
                                                 singleLine = true,
                                                 colors = OutlinedTextFieldDefaults.colors(
@@ -4419,7 +4561,6 @@ fun ChuyenPickView(
                                             )
 
                                             val filteredDrivers = driversList
-                                                .filter { it["isOutHub"] as? Boolean != true }
                                                 .filter { driver ->
                                                     val name = driver["name"]?.toString() ?: ""
                                                     val code = driver["code"]?.toString() ?: ""
@@ -4427,17 +4568,45 @@ fun ChuyenPickView(
                                                 }
 
                                             LazyColumn(
-                                                modifier = Modifier.fillMaxWidth().heightIn(max = 200.dp),
+                                                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp),
                                                 verticalArrangement = Arrangement.spacedBy(0.dp)
                                             ) {
-                                                if (filteredDrivers.isEmpty()) {
+                                                if (isLoadingDrivers && driversList.isEmpty()) {
                                                     item {
-                                                        Text("Không tìm thấy Rider nào", color = getTextColor(isDark).copy(alpha = 0.6f), modifier = Modifier.padding(8.dp))
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                                            horizontalArrangement = Arrangement.Center,
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            CircularProgressIndicator(color = ThemePrimary, modifier = Modifier.size(20.dp))
+                                                            Spacer(modifier = Modifier.width(8.dp))
+                                                            Text("Đang đồng bộ danh sách...", color = getTextColor(isDark).copy(alpha = 0.7f), fontSize = 13.sp)
+                                                        }
+                                                    }
+                                                } else if (filteredDrivers.isEmpty()) {
+                                                    item {
+                                                        Column(
+                                                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Text(
+                                                                if (driversLoadError != null) "Lỗi kết nối máy chủ: $driversLoadError" else "Không tìm thấy Rider nào",
+                                                                color = if (driversLoadError != null) ThemeAccent else getTextColor(isDark).copy(alpha = 0.6f),
+                                                                fontSize = 13.sp,
+                                                                textAlign = TextAlign.Center
+                                                            )
+                                                            Spacer(modifier = Modifier.height(6.dp))
+                                                            TextButton(onClick = { refreshDriversList() }) {
+                                                                Text("Nhấn để tải lại", color = ThemePrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                                            }
+                                                        }
                                                     }
                                                 } else {
                                                     itemsIndexed(filteredDrivers) { index, driver ->
                                                         val dName = driver["name"]?.toString() ?: ""
                                                         val dCode = driver["code"]?.toString() ?: ""
+                                                        val isOut = driver["isOutHub"] as? Boolean ?: false
+                                                        val suffix = if (isOut) " (Ngoài Hub)" else ""
                                                         Column(
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
@@ -4447,7 +4616,7 @@ fun ChuyenPickView(
                                                                 }
                                                                 .padding(vertical = 8.dp, horizontal = 4.dp)
                                                         ) {
-                                                            Text("$dName - $dCode", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                                            Text("$dName - $dCode$suffix", color = getTextColor(isDark), fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                                         }
                                                         if (index < filteredDrivers.lastIndex) {
                                                             HorizontalDivider(
