@@ -771,8 +771,7 @@ fun ShopeeAutoPrintApp(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream: InputStream? = context.contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    val bitmap = decodeSampledBitmapFromUri(context, uri, 1600, 1600)
                     if (bitmap != null) {
                         val inputImage = InputImage.fromBitmap(bitmap, 0)
                         
@@ -3147,6 +3146,39 @@ class ScanAnalyzer(
 
 fun updateHistoryFailed(historyList: MutableList<PrintHistoryItem>, code: String, error: String) {}
 
+fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+    val height = options.outHeight
+    val width = options.outWidth
+    var inSampleSize = 1
+    if (height > reqHeight || width > reqWidth) {
+        val halfHeight = height / 2
+        val halfWidth = width / 2
+        while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+            inSampleSize *= 2
+        }
+    }
+    return inSampleSize
+}
+
+fun decodeSampledBitmapFromUri(
+    context: Context,
+    uri: Uri,
+    reqWidth: Int = 1600,
+    reqHeight: Int = 1600
+): Bitmap? {
+    val options = BitmapFactory.Options().apply {
+        inJustDecodeBounds = true
+    }
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(stream, null, options)
+    }
+    options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
+    options.inJustDecodeBounds = false
+    return context.contentResolver.openInputStream(uri)?.use { stream ->
+        BitmapFactory.decodeStream(stream, null, options)
+    }
+}
+
 fun extractPupCode(text: String): String? {
     if (text.isBlank()) return null
     
@@ -4271,8 +4303,7 @@ fun ChuyenPickView(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    val bitmap = decodeSampledBitmapFromUri(context, uri, 1600, 1600)
                     if (bitmap != null) {
                         val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
                         val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
@@ -4339,8 +4370,7 @@ fun ChuyenPickView(
         if (uri != null) {
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                    val bitmap = decodeSampledBitmapFromUri(context, uri, 1600, 1600)
                     if (bitmap != null) {
                         val croppedHeight = (bitmap.height * 0.20).toInt().coerceAtLeast(1)
                         val croppedBitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, croppedHeight)
