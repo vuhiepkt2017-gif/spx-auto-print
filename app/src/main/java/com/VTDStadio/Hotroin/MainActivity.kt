@@ -2015,6 +2015,18 @@ fun ShopeeAutoPrintApp(
                         Text("ĐỒNG Ý", color = ThemePrimary)
                     }
                 },
+                dismissButton = {
+                    TextButton(onClick = {
+                        try {
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://vuhiepkt2017-gif.github.io/spx-auto-print/"))
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Không thể mở trình duyệt", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Text("XEM TRÊN WEB", color = ThemePrimary)
+                    }
+                },
                 containerColor = getThemeSurfaceColor(isDark)
             )
         }
@@ -2867,6 +2879,23 @@ fun LoginScreen(
                                 }
                             }
                         }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Chính sách quyền riêng tư",
+                            color = ThemePrimary,
+                            fontSize = 12.sp,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .clickable {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://vuhiepkt2017-gif.github.io/spx-auto-print/"))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Không thể mở trình duyệt", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                        )
                     }
                 }
             }
@@ -5720,6 +5749,7 @@ fun ChuyenPickLockedScreen(
 
 @Composable
 fun AppInfoSettingsSection(isDark: Boolean) {
+    val context = LocalContext.current
     var showBugReportDialog by remember { mutableStateOf(false) }
     var showIntroDialog by remember { mutableStateOf(false) }
     var showVersionDialog by remember { mutableStateOf(false) }
@@ -5871,6 +5901,18 @@ fun AppInfoSettingsSection(isDark: Boolean) {
             confirmButton = {
                 TextButton(onClick = { showPrivacyDialog = false }) {
                     Text("ĐỒNG Ý", color = ThemePrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://vuhiepkt2017-gif.github.io/spx-auto-print/"))
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Không thể mở trình duyệt", Toast.LENGTH_SHORT).show()
+                    }
+                }) {
+                    Text("XEM TRÊN WEB", color = ThemePrimary)
                 }
             },
             containerColor = getThemeSurfaceColor(isDark)

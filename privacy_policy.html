@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chính sách Quyền riêng tư - Hỗ Trợ Vận Hành (VTDStadio)</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --text-main: #1f2937;
+            --text-muted: #4b5563;
+            --bg-page: #f3f4f6;
+            --bg-card: #ffffff;
+            --border: #e5e7eb;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.65;
+            color: var(--text-main);
+            background-color: var(--bg-page);
+            margin: 0;
+            padding: 20px 10px;
+        }
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            background: var(--bg-card);
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border: 1px solid var(--border);
+        }
+        h1 {
+            color: var(--primary);
+            font-size: 26px;
+            margin-top: 0;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 12px;
+        }
+        h2 {
+            color: #111827;
+            font-size: 19px;
+            margin-top: 28px;
+            margin-bottom: 12px;
+        }
+        p, li {
+            color: var(--text-muted);
+            font-size: 15px;
+        }
+        ul {
+            padding-left: 24px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .badge {
+            display: inline-block;
+            background: #eff6ff;
+            color: var(--primary);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .box {
+            background: #f8fafc;
+            border-left: 4px solid var(--primary);
+            padding: 14px 18px;
+            margin: 18px 0;
+            border-radius: 0 6px 6px 0;
+        }
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            font-size: 13px;
+            color: #9ca3af;
+        }
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="badge">Chính sách Quyền riêng tư (Privacy Policy)</span>
+        <h1>Chính sách Quyền riêng tư - Ứng dụng Hỗ Trợ Vận Hành</h1>
+        <p><strong>Ngày có hiệu lực:</strong> 16 tháng 11, 2026</p>
+        <p><strong>Nhà phát triển:</strong> VTDStadio</p>
+        <p><strong>Tên ứng dụng:</strong> Hỗ Trợ Vận Hành</p>
+        <p><strong>Gói ứng dụng (Package Name):</strong> <code>com.VTDStadio.Hotroin</code></p>
+
+        <div class="box">
+            VTDStadio cam kết bảo vệ tối đa quyền riêng tư và dữ liệu cá nhân của người dùng ứng dụng <strong>Hỗ Trợ Vận Hành</strong>. Văn bản này trình bày chi tiết và minh bạch về cách thức chúng tôi thu thập, sử dụng, lưu trữ và bảo vệ thông tin khi bạn sử dụng ứng dụng của chúng tôi.
+        </div>
+
+        <h2>1. Thông tin chúng tôi thu thập</h2>
+        <p>Để phục vụ cho các tính năng vận hành đơn hàng và in ấn, ứng dụng thu thập các dữ liệu sau:</p>
+        <ul>
+            <li><strong>Thông tin tài khoản (Google Sign-In & Firebase Auth):</strong> Khi bạn đăng nhập, chúng tôi thu thập địa chỉ email và tên hiển thị từ tài khoản Google của bạn nhằm định danh người dùng, xác thực tài khoản Rider/Quản trị viên và phân quyền sử dụng hệ thống.</li>
+            <li><strong>Dữ liệu in ấn và chuyển đơn (Print & Transfer Data):</strong> Mã vận đơn, mã điểm nhận hàng (mã PUP), thời gian gửi yêu cầu in và thông tin tài khoản chuyển giao nhận đơn.</li>
+            <li><strong>Lịch sử thao tác:</strong> Nhật ký in ấn và trạng thái thành công/thất bại của từng mã đơn hàng nhằm hỗ trợ người dùng đối soát.</li>
+        </ul>
+
+        <h2>2. Quyền truy cập thiết bị (Permissions)</h2>
+        <p>Ứng dụng chỉ yêu cầu những quyền tối thiểu cần thiết để vận hành các tính năng cốt lõi:</p>
+        <ul>
+            <li><strong>Quyền Camera (Máy ảnh):</strong> Sử dụng để quét mã vạch (Barcode), mã QR trên gói hàng và nhận diện ký tự quang học (OCR) để đọc nhanh mã vận đơn. Quá trình xử lý hình ảnh diễn ra cục bộ trực tiếp trên thiết bị (on-device processing) thông qua thư viện Google ML Kit. Chúng tôi <strong>không</strong> tải hình ảnh cá nhân của bạn lên bất kỳ máy chủ công cộng nào.</li>
+            <li><strong>Quyền truy cập Ảnh / Thư viện (Storage / Media):</strong> Chỉ sử dụng khi bạn chủ động chọn ảnh chụp nhãn đơn hàng từ thư viện để ứng dụng nhận diện mã vận đơn và mã PUP.</li>
+            <li><strong>Dịch vụ chạy nền (Foreground Service):</strong> Giữ duy trì kết nối đồng bộ thông báo và cảnh báo in ấn kịp thời trong suốt ca làm việc.</li>
+        </ul>
+
+        <h2>3. Mục đích sử dụng thông tin</h2>
+        <p>Dữ liệu thu thập được sử dụng duy nhất cho các mục đích:</p>
+        <ul>
+            <li>Xác thực và duy trì phiên đăng nhập của người dùng.</li>
+            <li>Tự động truyền mã đơn hàng đến máy in và ghi nhận lịch sử vào bảng theo dõi Google Sheets / Firebase Firestore.</li>
+            <li>Đồng bộ hóa danh sách Rider và điều phối chuyển nhận hàng (Chuyển Pick) giữa các nhân viên trong Hub.</li>
+            <li>Chúng tôi <strong>tuyệt đối không</strong> bán, trao đổi, chia sẻ thông tin người dùng cho bất kỳ bên thứ ba nào vì mục đích quảng cáo hay tiếp thị.</li>
+        </ul>
+
+        <h2>4. Dịch vụ của bên thứ ba (Third-Party Services)</h2>
+        <p>Ứng dụng tích hợp các dịch vụ hạ tầng đám mây uy tín của Google để đảm bảo hiệu suất và độ tin cậy:</p>
+        <ul>
+            <li><strong>Google Play Services:</strong> Cung cấp nền tảng hoạt động cốt lõi cho ứng dụng Android.</li>
+            <li><strong>Google Firebase (Firebase Auth, Cloud Firestore):</strong> Xác thực bảo mật và lưu trữ cơ sở dữ liệu thời gian thực.</li>
+            <li><strong>Google ML Kit:</strong> Bộ công cụ nhận diện mã vạch và ký tự văn bản trên thiết bị.</li>
+        </ul>
+
+        <h2>5. Bảo mật dữ liệu</h2>
+        <p>Chúng tôi áp dụng các tiêu chuẩn an ninh tiên tiến để bảo vệ dữ liệu người dùng:</p>
+        <ul>
+            <li>Mọi dữ liệu truyền tải giữa thiết bị và máy chủ đều được mã hóa bằng giao thức bảo mật cao HTTPS / TLS.</li>
+            <li>Cơ sở dữ liệu đám mây được quản lý phân quyền chặt chẽ thông qua Firebase Security Rules, chỉ những tài khoản hợp lệ mới có quyền truy cập dữ liệu liên quan.</li>
+        </ul>
+
+        <h2>6. Quyền của người dùng và Yêu cầu xóa dữ liệu (Data Deletion)</h2>
+        <p>Bạn luôn có quyền kiểm soát hoàn toàn dữ liệu cá nhân của mình:</p>
+        <ul>
+            <li>Bạn có thể đăng xuất và ngưng sử dụng ứng dụng bất cứ lúc nào.</li>
+            <li><strong>Yêu cầu xóa tài khoản và toàn bộ dữ liệu:</strong> Để yêu cầu xóa vĩnh viễn tài khoản, thông tin cá nhân và lịch sử in ấn khỏi hệ thống máy chủ, bạn chỉ cần gửi email yêu cầu đến <a href="mailto:vuhiepkt2017@gmail.com">vuhiepkt2017@gmail.com</a> với tiêu đề <em>"Yêu cầu xóa dữ liệu - Hỗ Trợ Vận Hành"</em>. Chúng tôi sẽ xử lý và xóa toàn bộ dữ liệu của bạn trong vòng tối đa 7 ngày làm việc.</li>
+        </ul>
+
+        <h2>7. Thay đổi Chính sách Quyền riêng tư</h2>
+        <p>Chúng tôi có thể cập nhật chính sách này theo thời gian để phản ánh các cải tiến về tính năng hoặc yêu cầu pháp lý mới. Bất kỳ thay đổi nào cũng sẽ được cập nhật công khai tại trang này.</p>
+
+        <h2>8. Thông tin liên hệ</h2>
+        <p>Nếu bạn có bất kỳ câu hỏi, phản ánh hoặc yêu cầu liên quan đến Chính sách quyền riêng tư này, vui lòng liên hệ:</p>
+        <ul>
+            <li><strong>Đại diện phát triển:</strong> VTDStadio</li>
+            <li><strong>Email hỗ trợ:</strong> <a href="mailto:vuhiepkt2017@gmail.com">vuhiepkt2017@gmail.com</a></li>
+        </ul>
+
+        <div class="footer">
+            &copy; 2026 VTDStadio - Hỗ Trợ Vận Hành. All rights reserved.
+        </div>
+    </div>
+</body>
+</html>
